@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Hash, Clock, ArrowDownLeft, RefreshCcw, Landmark } from 'lucide-react';
+import React, { useState } from 'react';
+import { Search, Hash, Clock, ArrowDownLeft, RefreshCcw, Landmark, ShieldCheck } from 'lucide-react';
 import { useSessionStore } from '../store/useSessionStore';
 
 interface Payment {
@@ -40,86 +40,102 @@ export const PrivateInbox: React.FC = () => {
     };
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between mb-8">
+        <div className="glass rounded-[2.5rem] p-10 border-slate-100 overflow-hidden relative group">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
                 <div>
-                    <h3 className="text-2xl font-bold text-gray-900">Private Inbox</h3>
-                    <p className="text-gray-500 text-sm">Scan the network for payments to your stealth identity</p>
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+                            <Search className="w-5 h-5" />
+                        </div>
+                        <h3 className="text-3xl font-black text-slate-900 tracking-tight">Private Inbox</h3>
+                    </div>
+                    <p className="text-slate-400 font-bold text-sm ml-1">Cryptographic scanning active</p>
                 </div>
                 <button
                     onClick={handleScan}
                     disabled={isScanning}
-                    className="flex items-center gap-2 px-6 py-2.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-all disabled:opacity-50"
+                    className="flex items-center gap-2 px-8 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all disabled:opacity-50 shadow-xl shadow-indigo-100 active:scale-95"
                 >
-                    <RefreshCcw className={`w-4 h-4 ${isScanning ? 'animate-spin' : ''}`} />
-                    {isScanning ? 'Scanning...' : 'Scan Now'}
+                    <RefreshCcw className={`w-5 h-5 ${isScanning ? 'animate-spin' : ''}`} />
+                    {isScanning ? 'Scanning Ledger...' : 'Scan Now'}
                 </button>
             </div>
 
             {payments.length === 0 && !isScanning ? (
-                <div className="py-20 text-center bg-gray-50 rounded-3xl border border-dashed border-gray-200">
-                    <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center mx-auto mb-4 border border-gray-100">
-                        <Search className="w-6 h-6 text-gray-300" />
+                <div className="py-24 text-center bg-slate-50/50 rounded-3xl border border-dashed border-slate-200 flex flex-col items-center">
+                    <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center mb-6 shadow-sm border border-slate-100 mb-8">
+                        <ShieldCheck className="w-10 h-10 text-slate-200" />
                     </div>
-                    <p className="text-gray-400 font-medium tracking-tight">No payments found yet. Try scanning!</p>
+                    <h4 className="text-xl font-black text-slate-900 mb-2">Inbox is empty</h4>
+                    <p className="text-slate-400 font-bold text-sm max-w-xs mx-auto">Click "Scan Now" to search for new stealth-payments sent to your identity.</p>
                 </div>
             ) : (
-                <div className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead>
-                                <tr className="bg-gray-50/50 border-b border-gray-100">
-                                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Amount</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Date</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">TX Hash</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Status</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Action</th>
+                <div className="overflow-x-auto -mx-10 px-10">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="border-b border-slate-100">
+                                <th className="px-6 py-6 text-xs font-black text-slate-400 uppercase tracking-widest">Payment</th>
+                                <th className="px-6 py-6 text-xs font-black text-slate-400 uppercase tracking-widest">Arrival</th>
+                                <th className="px-6 py-6 text-xs font-black text-slate-400 uppercase tracking-widest hidden md:table-cell">Identity Link</th>
+                                <th className="px-6 py-6 text-xs font-black text-slate-400 uppercase tracking-widest">Status</th>
+                                <th className="px-6 py-6 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Vault</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                            {payments.map((p) => (
+                                <tr key={p.id} className="hover:bg-indigo-50/20 transition-all group/row">
+                                    <td className="px-6 py-8">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-emerald-500 shadow-sm border border-slate-100 group-hover/row:scale-110 transition-transform">
+                                                <ArrowDownLeft className="w-6 h-6" />
+                                            </div>
+                                            <div>
+                                                <span className="block text-lg font-black text-slate-900 leading-none mb-1">{p.amount}</span>
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Starknet Mainnet</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-8">
+                                        <div className="flex items-center gap-2 text-sm font-bold text-slate-500">
+                                            <Clock className="w-4 h-4 text-slate-300" />
+                                            {p.timestamp}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-8 hidden md:table-cell">
+                                        <div className="flex items-center gap-2 font-mono text-xs font-bold text-slate-400 bg-slate-50 w-fit px-3 py-1.5 rounded-lg">
+                                            <Hash className="w-3.5 h-3.5" />
+                                            {p.txHash}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-8">
+                                        <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${p.status === 'unclaimed'
+                                            ? 'bg-amber-100 text-amber-700 block w-fit'
+                                            : 'bg-slate-100 text-slate-400 block w-fit'
+                                            }`}>
+                                            {p.status}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-8 text-right">
+                                        {p.status === 'unclaimed' ? (
+                                            <button
+                                                onClick={() => window.location.href = '/withdraw'}
+                                                className="flex items-center gap-2 ml-auto px-6 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-black transition-all shadow-lg shadow-slate-200 active:scale-95"
+                                            >
+                                                <Landmark className="w-4 h-4" />
+                                                Sweep to Wallet
+                                            </button>
+                                        ) : (
+                                            <div className="text-xs font-bold text-slate-300 uppercase tracking-widest mr-4">Settled</div>
+                                        )}
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50">
-                                {payments.map((p) => (
-                                    <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
-                                        <td className="px-6 py-5">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center text-green-600">
-                                                    <ArrowDownLeft className="w-4 h-4" />
-                                                </div>
-                                                <span className="font-bold text-gray-900">{p.amount}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-5 text-sm text-gray-500 font-medium">
-                                            <div className="flex items-center gap-2">
-                                                <Clock className="w-3.5 h-3.5" />
-                                                {p.timestamp}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-5 text-sm font-mono text-gray-400">
-                                            <div className="flex items-center gap-2">
-                                                <Hash className="w-3.5 h-3.5" />
-                                                {p.txHash}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-5">
-                                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-tight ${p.status === 'unclaimed' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'
-                                                }`}>
-                                                {p.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-5 text-right">
-                                            {p.status === 'unclaimed' && (
-                                                <button className="flex items-center gap-1.5 ml-auto px-4 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg font-bold text-sm hover:bg-indigo-100 transition-colors">
-                                                    <Landmark className="w-3.5 h-3.5" />
-                                                    Withdraw
-                                                </button>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             )}
+            {/* Gloss Decoration */}
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent" />
         </div>
     );
 };
