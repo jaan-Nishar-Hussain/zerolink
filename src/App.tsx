@@ -87,26 +87,26 @@ function App() {
               <ul className="space-y-4 text-sm font-bold text-slate-400">
                 <li><a href="#" className="hover:text-indigo-600 transition-colors">Documentation</a></li>
                 <li><a href="#" className="hover:text-indigo-600 transition-colors">Developer Portal</a></li>
-                <li><a href#" className="hover:text-indigo-600 transition-colors">Security Audit</a></li>
-            </ul>
+                <li><a href="#" className="hover:text-indigo-600 transition-colors">Security Audit</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-bold text-slate-900 mb-6 uppercase tracking-widest text-xs">Community</h4>
+              <ul className="space-y-4 text-sm font-bold text-slate-400">
+                <li><a href="#" className="hover:text-indigo-600 transition-colors flex items-center gap-2"><Globe className="w-4 h-4" /> Twitter</a></li>
+                <li><a href="#" className="hover:text-indigo-600 transition-colors flex items-center gap-2"><Github className="w-4 h-4" /> GitHub</a></li>
+                <li><a href="#" className="hover:text-indigo-600 transition-colors flex items-center gap-2">Discord</a></li>
+              </ul>
+            </div>
           </div>
-          <div>
-            <h4 className="font-bold text-slate-900 mb-6 uppercase tracking-widest text-xs">Community</h4>
-            <ul className="space-y-4 text-sm font-bold text-slate-400">
-              <li><a href="#" className="hover:text-indigo-600 transition-colors flex items-center gap-2"><Globe className="w-4 h-4" /> Twitter</a></li>
-              <li><a href="#" className="hover:text-indigo-600 transition-colors flex items-center gap-2"><Github className="w-4 h-4" /> GitHub</a></li>
-              <li><a href="#" className="hover:text-indigo-600 transition-colors flex items-center gap-2">Discord</a></li>
-            </ul>
+          <div className="pt-8 border-t border-slate-50 flex flex-col md:flex-row justify-between items-center gap-4 text-xs font-bold text-slate-300">
+            <span>© 2026 ZEROLINK PROTOCOL. ALL RIGHTS RESERVED.</span>
+            <div className="flex gap-8">
+              <a href="#" className="hover:text-slate-500">PRIVACY POLICY</a>
+              <a href="#" className="hover:text-slate-500">TERMS OF SERVICE</a>
+            </div>
           </div>
         </div>
-        <div className="pt-8 border-t border-slate-50 flex flex-col md:flex-row justify-between items-center gap-4 text-xs font-bold text-slate-300">
-          <span>© 2026 ZEROLINK PROTOCOL. ALL RIGHTS RESERVED.</span>
-          <div className="flex gap-8">
-            <a href="#" className="hover:text-slate-500">PRIVACY POLICY</a>
-            <a href="#" className="hover:text-slate-500">TERMS OF SERVICE</a>
-          </div>
-        </div>
-    </div>
       </footer >
     </div >
   );
