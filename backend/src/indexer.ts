@@ -5,12 +5,10 @@
  * Stores them in the database for recipient detection
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from './db';
 import dotenv from 'dotenv';
 
 dotenv.config();
-
-const prisma = new PrismaClient();
 
 // Configuration
 const STARKNET_RPC = process.env.STARKNET_RPC_URL || 'https://free-rpc.nethermind.io/sepolia-juno';
@@ -36,6 +34,14 @@ interface BlockWithTxs {
         transaction_hash: string;
         events: StarknetEvent[];
     }[];
+}
+
+interface RPCResponse {
+    result?: {
+        events?: StarknetEvent[];
+        timestamp?: number;
+    } | number;
+    error?: { message: string };
 }
 
 /**
@@ -113,14 +119,15 @@ async function fetchEvents(fromBlock: bigint, toBlock: bigint): Promise<Starknet
             }),
         });
 
-        const result = await response.json();
+        const result = await response.json() as RPCResponse;
 
         if (result.error) {
             console.error('RPC error:', result.error);
             return [];
         }
 
-        return result.result?.events || [];
+        const resultData = result.result as { events?: StarknetEvent[] } | undefined;
+        return resultData?.events || [];
     } catch (error) {
         console.error('Failed to fetch events:', error);
         return [];
@@ -143,8 +150,8 @@ async function getCurrentBlockNumber(): Promise<bigint> {
             }),
         });
 
-        const result = await response.json();
-        return BigInt(result.result || 0);
+        const result = await response.json() as RPCResponse;
+        return BigInt((result.result as number) || 0);
     } catch (error) {
         console.error('Failed to get block number:', error);
         return BigInt(0);
@@ -167,8 +174,9 @@ async function getBlockTimestamp(blockNumber: bigint): Promise<Date> {
             }),
         });
 
-        const result = await response.json();
-        const timestamp = result.result?.timestamp || Math.floor(Date.now() / 1000);
+        const result = await response.json() as RPCResponse;
+        const resultData = result.result as { timestamp?: number } | undefined;
+        const timestamp = resultData?.timestamp || Math.floor(Date.now() / 1000);
         return new Date(timestamp * 1000);
     } catch (error) {
         return new Date();

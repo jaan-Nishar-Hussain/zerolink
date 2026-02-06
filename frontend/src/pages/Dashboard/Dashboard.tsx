@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     Shield,
     Wallet,
@@ -13,12 +13,24 @@ import {
     Download
 } from 'lucide-react';
 import { useAppStore } from '../../store';
+import { TransactionMonitor } from '../../components/TransactionMonitor';
+import { loadKeys, type StealthKeys } from '../../lib/crypto';
 import './Dashboard.css';
 
 export function Dashboard() {
     const [showBalance, setShowBalance] = useState(true);
     const [copied, setCopied] = useState(false);
+    const [stealthKeys, setStealthKeys] = useState<StealthKeys | null>(null);
     const { alias, payments, isUnlocked } = useAppStore();
+
+    // Load stealth keys when unlocked
+    useEffect(() => {
+        if (isUnlocked) {
+            // Note: In production, we'd need the password from session
+            // For now, this is a placeholder for the keys loading logic
+            // stealthKeys would be passed from the unlock flow
+        }
+    }, [isUnlocked]);
 
     // Mock data for demo
     const mockPayments = payments.length > 0 ? payments : [
@@ -234,6 +246,15 @@ export function Dashboard() {
                             </p>
                         </div>
                     )}
+                </div>
+
+                {/* Transaction Monitor */}
+                <div className="monitor-section animate-slide-up" style={{ animationDelay: '0.5s' }}>
+                    <TransactionMonitor
+                        stealthKeys={stealthKeys || undefined}
+                        autoScan={true}
+                        scanInterval={30000}
+                    />
                 </div>
             </div>
         </div>

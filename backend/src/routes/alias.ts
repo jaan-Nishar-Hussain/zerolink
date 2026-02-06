@@ -1,8 +1,29 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../db';
+import { z } from 'zod';
 
 const router = Router();
-const prisma = new PrismaClient();
+
+// Zod validation schemas
+const aliasSchema = z.string()
+    .min(3, 'Alias must be at least 3 characters')
+    .max(30, 'Alias must be at most 30 characters')
+    .regex(/^[a-z0-9_-]+$/, 'Use only lowercase letters, numbers, underscores, and hyphens');
+
+const hexKeySchema = z.string()
+    .regex(/^[0-9a-fA-F]+$/, 'Must be a valid hex string');
+
+const registerAliasSchema = z.object({
+    alias: aliasSchema,
+    spendPubKey: hexKeySchema,
+    viewingPubKey: hexKeySchema,
+    displayName: z.string().max(50).optional(),
+});
+
+const updateAliasSchema = z.object({
+    displayName: z.string().max(50).optional(),
+    avatarUrl: z.string().url().optional(),
+});
 
 interface AliasParams {
     alias: string;
@@ -55,40 +76,18 @@ router.get<AliasParams>('/:alias', async (req, res) => {
  */
 router.post('/', async (req, res) => {
     try {
-        const { alias, spendPubKey, viewingPubKey, displayName } = req.body;
-
-        // Validate inputs
-        if (!alias || !spendPubKey || !viewingPubKey) {
+        // Validate request body with Zod
+        const parseResult = registerAliasSchema.safeParse(req.body);
+        if (!parseResult.success) {
             res.status(400).json({
-                error: 'Missing required fields: alias, spendPubKey, viewingPubKey'
+                error: 'Validation failed',
+                details: parseResult.error.flatten().fieldErrors
             });
             return;
         }
 
-        // Validate alias format
-        const aliasLower = (alias as string).toLowerCase();
-        if (!/^[a-z0-9_-]+$/.test(aliasLower)) {
-            res.status(400).json({
-                error: 'Invalid alias format. Use only letters, numbers, underscores, and hyphens.'
-            });
-            return;
-        }
-
-        if (aliasLower.length < 3 || aliasLower.length > 30) {
-            res.status(400).json({
-                error: 'Alias must be between 3 and 30 characters'
-            });
-            return;
-        }
-
-        // Validate public keys (basic hex check)
-        const hexRegex = /^[0-9a-fA-F]+$/;
-        if (!hexRegex.test(spendPubKey) || !hexRegex.test(viewingPubKey)) {
-            res.status(400).json({
-                error: 'Invalid public key format (must be hex)'
-            });
-            return;
-        }
+        const { alias, spendPubKey, viewingPubKey, displayName } = parseResult.data;
+        const aliasLower = alias.toLowerCase();
 
         // Check if alias already exists
         const existing = await prisma.alias.findUnique({

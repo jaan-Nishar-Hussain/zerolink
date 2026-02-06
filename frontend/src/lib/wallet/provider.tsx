@@ -5,8 +5,9 @@
  */
 
 import { sepolia, mainnet } from '@starknet-react/chains';
-import { StarknetConfig, publicProvider, argent, braavos } from '@starknet-react/core';
+import { StarknetConfig, argent, braavos, jsonRpcProvider } from '@starknet-react/core';
 import type { ReactNode } from 'react';
+import { RpcProvider } from 'starknet';
 
 // Supported chains
 const chains = [sepolia, mainnet];
@@ -17,8 +18,17 @@ const connectors = [
     braavos(),
 ];
 
-// Provider configuration
-const provider = publicProvider();
+// Use Alchemy or Infura for more reliable RPC
+// Fall back to public endpoints with correct spec version handling
+function rpc(chain: typeof sepolia | typeof mainnet) {
+    const rpcUrl = chain.id === sepolia.id
+        ? import.meta.env.VITE_STARKNET_RPC || 'https://starknet-sepolia.public.blastapi.io/rpc/v0_7'
+        : 'https://starknet-mainnet.public.blastapi.io/rpc/v0_7';
+
+    return {
+        nodeUrl: rpcUrl,
+    };
+}
 
 interface WalletProviderProps {
     children: ReactNode;
@@ -28,7 +38,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
     return (
         <StarknetConfig
             chains={chains}
-            provider={provider}
+            provider={jsonRpcProvider({ rpc })}
             connectors={connectors}
             autoConnect
         >

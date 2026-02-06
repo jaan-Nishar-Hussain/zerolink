@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { PrismaClient, StealthAnnouncement } from '@prisma/client';
+import { prisma } from '../db';
+import type { StealthAnnouncement } from '@prisma/client';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 /**
  * GET /api/announcements

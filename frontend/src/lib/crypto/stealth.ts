@@ -1,9 +1,18 @@
 /**
  * ZeroLink Stealth Address Cryptography
  * 
- * Uses Web Crypto API for all cryptographic operations
+ * Implements EIP-5564 style stealth addresses using secp256k1
+ * Uses @noble/curves for all elliptic curve operations
  * Client-side only - NEVER send private keys to backend
  */
+
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex as toHex, hexToBytes as fromHex, concatBytes as concatBytesUtil } from '@noble/hashes/utils.js';
+
+// =============================================================================
+// TYPE DEFINITIONS
+// =============================================================================
 
 export interface KeyPair {
     privateKey: Uint8Array;
@@ -11,8 +20,8 @@ export interface KeyPair {
 }
 
 export interface MetaAddress {
-    spendPubKey: string;
-    viewingPubKey: string;
+    spendPubKey: string;    // Hex-encoded compressed public key
+    viewingPubKey: string;  // Hex-encoded compressed public key
 }
 
 export interface StealthKeys {
@@ -22,25 +31,43 @@ export interface StealthKeys {
 }
 
 export interface StealthAddress {
-    address: string;
+    address: string;           // Starknet-compatible address
+    ephemeralPubKey: string;   // Hex-encoded ephemeral public key
+    stealthPubKey: string;     // Hex-encoded stealth public key
+}
+
+export interface DetectedPayment {
+    stealthAddress: string;
+    stealthPrivateKey: Uint8Array;
     ephemeralPubKey: string;
+    amount: string;
+    token: string;
+    txHash: string;
 }
 
-// Helper functions for hex conversion
-function bytesToHex(bytes: Uint8Array): string {
-    return Array.from(bytes)
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+/**
+ * Convert bytes to hex string
+ */
+export function bytesToHex(bytes: Uint8Array): string {
+    return toHex(bytes);
 }
 
-function hexToBytes(hex: string): Uint8Array {
-    const bytes = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < hex.length; i += 2) {
-        bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
-    }
-    return bytes;
+/**
+ * Convert hex string to bytes
+ */
+export function hexToBytes(hex: string): Uint8Array {
+    // Remove 0x prefix if present
+    const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
+    return fromHex(cleanHex);
 }
 
+/**
+ * Concatenate multiple byte arrays
+ */
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {
     const totalLength = arrays.reduce((sum, arr) => sum + arr.length, 0);
     const result = new Uint8Array(totalLength);
@@ -52,49 +79,52 @@ function concatBytes(...arrays: Uint8Array[]): Uint8Array {
     return result;
 }
 
-async function sha256(data: Uint8Array): Promise<Uint8Array> {
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data as unknown as ArrayBuffer);
-    return new Uint8Array(hashBuffer);
+// secp256k1 curve order
+const CURVE_ORDER = BigInt('0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141');
+
+/**
+ * Modular addition of two scalars in secp256k1 field
+ */
+function modAdd(a: Uint8Array, b: Uint8Array): Uint8Array {
+    const aNum = BigInt('0x' + bytesToHex(a));
+    const bNum = BigInt('0x' + bytesToHex(b));
+    const sum = (aNum + bNum) % CURVE_ORDER;
+    const hexSum = sum.toString(16).padStart(64, '0');
+    return hexToBytes(hexSum);
+}
+
+// =============================================================================
+// KEY GENERATION (secp256k1)
+// =============================================================================
+
+/**
+ * Generate a cryptographically secure random private key
+ */
+export function generatePrivateKey(): Uint8Array {
+    return secp256k1.utils.randomSecretKey();
 }
 
 /**
- * Generate a random 32-byte private key
+ * Derive compressed public key from private key
  */
-function generatePrivateKey(): Uint8Array {
-    return crypto.getRandomValues(new Uint8Array(32));
+export function derivePublicKey(privateKey: Uint8Array): Uint8Array {
+    return secp256k1.getPublicKey(privateKey, true); // compressed
 }
 
 /**
- * Simple public key derivation (mock - in production use proper EC curve)
- * For demo purposes, we use a hash of the private key
+ * Generate a new keypair
  */
-async function derivePublicKey(privateKey: Uint8Array): Promise<Uint8Array> {
-    const hash = await sha256(privateKey);
-    // Add a prefix byte to indicate compressed format
-    return concatBytes(new Uint8Array([0x02]), hash);
-}
-
-/**
- * Generate a random keypair
- */
-export async function generateKeyPairAsync(): Promise<KeyPair> {
+export function generateKeyPair(): KeyPair {
     const privateKey = generatePrivateKey();
-    const publicKey = await derivePublicKey(privateKey);
+    const publicKey = derivePublicKey(privateKey);
     return { privateKey, publicKey };
 }
 
 /**
- * Synchronous key generation (uses simpler derivation)
+ * Async version of generateKeyPair (for compatibility)
  */
-export function generateKeyPair(): KeyPair {
-    const privateKey = generatePrivateKey();
-    // Simple deterministic derivation for sync operation
-    const publicKeyBytes = new Uint8Array(33);
-    publicKeyBytes[0] = 0x02;
-    for (let i = 0; i < 32; i++) {
-        publicKeyBytes[i + 1] = privateKey[i] ^ 0x55; // Simple XOR transform
-    }
-    return { privateKey, publicKey: publicKeyBytes };
+export async function generateKeyPairAsync(): Promise<KeyPair> {
+    return generateKeyPair();
 }
 
 /**
@@ -114,66 +144,219 @@ export function generateStealthKeys(): StealthKeys {
     };
 }
 
+// =============================================================================
+// STEALTH ADDRESS DERIVATION (SENDER SIDE)
+// 
+// Protocol (EIP-5564 style):
+// 1. Sender generates ephemeral keypair (r, R = r·G)
+// 2. Sender computes shared secret S = r · viewingPub
+// 3. Sender computes tweak = SHA256(S)
+// 4. Sender computes stealth public key: P_stealth = spendPub + tweak·G
+// 5. Sender derives address from stealth public key
+// =============================================================================
+
 /**
- * Compute shared secret between private key and public key
+ * Compute ECDH shared secret between private key and public key
+ * Returns the x-coordinate of the shared point
  */
-async function computeSharedSecret(
+export function computeSharedSecret(
     privateKey: Uint8Array,
     publicKey: Uint8Array
-): Promise<Uint8Array> {
-    // Concatenate and hash for demo (in production use ECDH)
-    const combined = concatBytes(privateKey, publicKey);
-    return sha256(combined);
+): Uint8Array {
+    const sharedPoint = secp256k1.getSharedSecret(privateKey, publicKey, true);
+    // Return x-coordinate (skip the prefix byte)
+    return sharedPoint.slice(1, 33);
+}
+
+/**
+ * Compute the tweak from shared secret
+ */
+export function computeTweak(sharedSecret: Uint8Array): Uint8Array {
+    return sha256(sharedSecret);
+}
+
+/**
+ * Add tweak to a public key (point addition: pubKey + tweak·G)
+ */
+export function addTweakToPublicKey(
+    publicKey: Uint8Array,
+    tweak: Uint8Array
+): Uint8Array {
+    // Compute tweak·G: derive public key from tweak as "private key"
+    const tweakPubKeyBytes = secp256k1.getPublicKey(tweak, true);
+    const tweakPoint = secp256k1.Point.fromHex(bytesToHex(tweakPubKeyBytes));
+
+    // Parse the public key point
+    const pubPoint = secp256k1.Point.fromHex(bytesToHex(publicKey));
+
+    // Add points: pubKey + tweak·G
+    const stealthPoint = pubPoint.add(tweakPoint);
+
+    // Return compressed format
+    return stealthPoint.toBytes(true);
+}
+
+/**
+ * Convert public key to Starknet-compatible address
+ * Uses the lower 251 bits of the hash
+ */
+export function publicKeyToStarknetAddress(publicKey: Uint8Array): string {
+    const hash = sha256(publicKey);
+    // Take first 31 bytes and convert to hex (248 bits, within 251 bit limit)
+    const addressBytes = hash.slice(0, 31);
+    return '0x' + bytesToHex(addressBytes);
 }
 
 /**
  * Derive stealth address from meta address (SENDER SIDE)
- */
-export async function deriveStealthAddressAsync(metaAddress: MetaAddress): Promise<StealthAddress> {
-    const ephemeralKeyPair = generateKeyPair();
-    const viewingPubKey = hexToBytes(metaAddress.viewingPubKey);
-    const spendPubKey = hexToBytes(metaAddress.spendPubKey);
-
-    const sharedSecret = await computeSharedSecret(ephemeralKeyPair.privateKey, viewingPubKey);
-    const tweak = await sha256(sharedSecret);
-
-    // Derive stealth public key by combining spend pub key and tweak
-    const stealthPubKey = concatBytes(spendPubKey, tweak);
-
-    // Hash to get address
-    const addressHash = await sha256(stealthPubKey);
-    const address = '0x' + bytesToHex(addressHash).slice(0, 40);
-
-    return {
-        address,
-        ephemeralPubKey: bytesToHex(ephemeralKeyPair.publicKey),
-    };
-}
-
-/**
- * Sync version that creates predictable output (for demo)
+ * This is the main function senders use to create a payment destination
  */
 export function deriveStealthAddress(metaAddress: MetaAddress): StealthAddress {
+    // 1. Generate ephemeral keypair
     const ephemeralKeyPair = generateKeyPair();
+
+    // 2. Parse recipient's keys
     const viewingPubKey = hexToBytes(metaAddress.viewingPubKey);
     const spendPubKey = hexToBytes(metaAddress.spendPubKey);
 
-    // Simple deterministic derivation for sync
-    const combined = concatBytes(ephemeralKeyPair.privateKey, viewingPubKey, spendPubKey);
-    const addressBytes = new Uint8Array(20);
-    for (let i = 0; i < 20; i++) {
-        addressBytes[i] = combined[i % combined.length] ^ combined[(i + 7) % combined.length];
-    }
-    const address = '0x' + bytesToHex(addressBytes);
+    // 3. Compute shared secret: S = ephemeralPriv · viewingPub
+    const sharedSecret = computeSharedSecret(ephemeralKeyPair.privateKey, viewingPubKey);
+
+    // 4. Compute tweak: t = SHA256(S)
+    const tweak = computeTweak(sharedSecret);
+
+    // 5. Compute stealth public key: P_stealth = spendPub + t·G
+    const stealthPubKey = addTweakToPublicKey(spendPubKey, tweak);
+
+    // 6. Derive Starknet address from stealth public key
+    const address = publicKeyToStarknetAddress(stealthPubKey);
 
     return {
         address,
         ephemeralPubKey: bytesToHex(ephemeralKeyPair.publicKey),
+        stealthPubKey: bytesToHex(stealthPubKey),
     };
 }
 
 /**
- * Export keys as encrypted backup (using password)
+ * Async version of deriveStealthAddress (for compatibility)
+ */
+export async function deriveStealthAddressAsync(metaAddress: MetaAddress): Promise<StealthAddress> {
+    return deriveStealthAddress(metaAddress);
+}
+
+// =============================================================================
+// STEALTH KEY DERIVATION (RECEIVER SIDE)
+// 
+// Protocol:
+// 1. Receiver computes shared secret S = viewingPriv · ephemeralPub
+// 2. Receiver computes tweak = SHA256(S)
+// 3. Receiver computes stealth private key: s_stealth = spendPriv + tweak (mod n)
+// =============================================================================
+
+/**
+ * Derive stealth private key from ephemeral public key (RECEIVER SIDE)
+ * This allows the receiver to spend funds sent to the stealth address
+ */
+export function deriveStealthPrivateKey(
+    viewingPrivateKey: Uint8Array,
+    spendPrivateKey: Uint8Array,
+    ephemeralPubKey: Uint8Array
+): Uint8Array {
+    // 1. Compute shared secret: S = viewingPriv · ephemeralPub
+    const sharedSecret = computeSharedSecret(viewingPrivateKey, ephemeralPubKey);
+
+    // 2. Compute tweak: t = SHA256(S)
+    const tweak = computeTweak(sharedSecret);
+
+    // 3. Compute stealth private key: s_stealth = spendPriv + t (mod n)
+    const stealthPrivateKey = modAdd(spendPrivateKey, tweak);
+
+    return stealthPrivateKey;
+}
+
+/**
+ * Verify that an announcement belongs to this receiver
+ * Returns the stealth private key if it matches, null otherwise
+ */
+export function checkStealthPayment(
+    viewingPrivateKey: Uint8Array,
+    spendPrivateKey: Uint8Array,
+    spendPublicKey: Uint8Array,
+    ephemeralPubKeyHex: string,
+    expectedAddress: string
+): { stealthPrivKey: Uint8Array; stealthAddress: string } | null {
+    const ephemeralPubKey = hexToBytes(ephemeralPubKeyHex);
+
+    // Compute shared secret
+    const sharedSecret = computeSharedSecret(viewingPrivateKey, ephemeralPubKey);
+
+    // Compute tweak
+    const tweak = computeTweak(sharedSecret);
+
+    // Compute expected stealth public key
+    const stealthPubKey = addTweakToPublicKey(spendPublicKey, tweak);
+
+    // Derive address
+    const derivedAddress = publicKeyToStarknetAddress(stealthPubKey);
+
+    // Check if it matches
+    if (derivedAddress.toLowerCase() === expectedAddress.toLowerCase()) {
+        // It's ours! Derive the private key
+        const stealthPrivKey = modAdd(spendPrivateKey, tweak);
+        return { stealthPrivKey, stealthAddress: derivedAddress };
+    }
+
+    return null;
+}
+
+/**
+ * Scan a list of announcements for payments belonging to this receiver
+ */
+export function detectPayments(
+    viewingPrivateKey: Uint8Array,
+    spendPrivateKey: Uint8Array,
+    spendPublicKey: Uint8Array,
+    announcements: Array<{
+        ephemeralPubKey: string;
+        stealthAddress: string;
+        amount: string;
+        token: string;
+        txHash: string;
+    }>
+): DetectedPayment[] {
+    const detected: DetectedPayment[] = [];
+
+    for (const announcement of announcements) {
+        const result = checkStealthPayment(
+            viewingPrivateKey,
+            spendPrivateKey,
+            spendPublicKey,
+            announcement.ephemeralPubKey,
+            announcement.stealthAddress
+        );
+
+        if (result) {
+            detected.push({
+                stealthAddress: result.stealthAddress,
+                stealthPrivateKey: result.stealthPrivKey,
+                ephemeralPubKey: announcement.ephemeralPubKey,
+                amount: announcement.amount,
+                token: announcement.token,
+                txHash: announcement.txHash,
+            });
+        }
+    }
+
+    return detected;
+}
+
+// =============================================================================
+// KEY EXPORT/IMPORT (Encrypted Backup)
+// =============================================================================
+
+/**
+ * Export keys as encrypted backup using WebCrypto
  */
 export async function exportKeysEncrypted(
     keys: StealthKeys,
@@ -259,18 +442,9 @@ export async function importKeysEncrypted(
     const spendPrivKey = hexToBytes(keyData.spendPrivKey);
     const viewingPrivKey = hexToBytes(keyData.viewingPrivKey);
 
-    // Regenerate public keys from private keys
-    const spendPubKey = new Uint8Array(33);
-    spendPubKey[0] = 0x02;
-    for (let i = 0; i < 32; i++) {
-        spendPubKey[i + 1] = spendPrivKey[i] ^ 0x55;
-    }
-
-    const viewingPubKey = new Uint8Array(33);
-    viewingPubKey[0] = 0x02;
-    for (let i = 0; i < 32; i++) {
-        viewingPubKey[i + 1] = viewingPrivKey[i] ^ 0x55;
-    }
+    // Regenerate public keys from private keys using real EC math
+    const spendPubKey = derivePublicKey(spendPrivKey);
+    const viewingPubKey = derivePublicKey(viewingPrivKey);
 
     return {
         spendKeyPair: {
@@ -283,4 +457,55 @@ export async function importKeysEncrypted(
         },
         metaAddress: keyData.metaAddress,
     };
+}
+
+// =============================================================================
+// UTILITY FUNCTIONS
+// =============================================================================
+
+/**
+ * Verify that a private key is valid for secp256k1
+ */
+export function isValidPrivateKey(privateKey: Uint8Array): boolean {
+    try {
+        secp256k1.getPublicKey(privateKey);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Verify that a public key is valid for secp256k1
+ */
+export function isValidPublicKey(publicKeyHex: string): boolean {
+    try {
+        secp256k1.Point.fromHex(publicKeyHex);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Sign a message hash with a private key
+ */
+export function signMessage(privateKey: Uint8Array, messageHash: Uint8Array): Uint8Array {
+    const signature = secp256k1.sign(messageHash, privateKey, { prehash: false });
+    return signature;
+}
+
+/**
+ * Verify a signature
+ */
+export function verifySignature(
+    signature: Uint8Array,
+    messageHash: Uint8Array,
+    publicKey: Uint8Array
+): boolean {
+    try {
+        return secp256k1.verify(signature, messageHash, publicKey);
+    } catch {
+        return false;
+    }
 }
