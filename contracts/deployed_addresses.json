@@ -1,0 +1,15 @@
+{
+  "network": "sepolia",
+  "deployedAt": "2026-02-06T18:15:00Z",
+  "contracts": {
+    "EventEmitter": "0x05433462a4ce26bae3e219f54e81a8f33457dd249f96f62cbc19ada62ed6ea88",
+    "StealthPayment": "0x04a3d113783d861442b1725bf483222b4db40d5e9d34ceefd937e6973c408cd2",
+    "TokenAdapter": "0x01889cdaa555c9081f84e09d3496aaa3b1814d91245dfe9becea1e05b2a25a92"
+  },
+  "classHashes": {
+    "EventEmitter": "0x40680eb78a16e7654ddb91ad54f4b0cb6e7e578f4230b8efd365859776b07ae",
+    "StealthPayment": "0x7d6b71c97b6e5a415134adf7c4237c3bb45bc5cbb081874603ba798f44c8b45",
+    "TokenAdapter": "0x35d1598348fc39d43f68c5687074f54d65f1dd9b77f0754ccf7ce93c0074baa"
+  },
+  "deployerAccount": "0x031fc20a3f478d06c483002ff3cd02b1637ce0a54faf4f67cd4f1adb3e32a0cc"
+}

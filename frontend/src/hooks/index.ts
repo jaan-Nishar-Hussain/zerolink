@@ -1,0 +1,1 @@
+export { useSendStealthPayment } from './useSendStealthPayment';

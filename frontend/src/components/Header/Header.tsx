@@ -10,12 +10,13 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAppStore } from '../../store';
+import { WalletButton } from '../WalletButton';
 import './Header.css';
 
 export function Header() {
     const location = useLocation();
     const [menuOpen, setMenuOpen] = useState(false);
-    const { isWalletConnected, alias, walletAddress } = useAppStore();
+    const { alias } = useAppStore();
 
     const navItems = [
         { path: '/', label: 'Home', icon: Home },
@@ -26,10 +27,6 @@ export function Header() {
     ];
 
     const isActive = (path: string) => location.pathname === path;
-
-    const truncateAddress = (address: string) => {
-        return `${address.slice(0, 6)}...${address.slice(-4)}`;
-    };
 
     return (
         <header className="header">
@@ -54,18 +51,8 @@ export function Header() {
                 </nav>
 
                 <div className="header-actions">
-                    {isWalletConnected ? (
-                        <div className="wallet-info">
-                            {alias && <span className="alias">@{alias}</span>}
-                            <span className="address mono">
-                                {walletAddress ? truncateAddress(walletAddress) : ''}
-                            </span>
-                        </div>
-                    ) : (
-                        <Link to="/receive" className="btn btn-primary">
-                            Get Started
-                        </Link>
-                    )}
+                    {alias && <span className="alias-badge">@{alias}</span>}
+                    <WalletButton />
 
                     <button
                         className="menu-toggle"
