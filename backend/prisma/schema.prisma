@@ -1,0 +1,55 @@
+// ZeroLink Prisma Schema
+// Alias Registry for stealth payment links
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// User's public payment profile (NO private keys stored)
+model Alias {
+  id              String   @id @default(cuid())
+  alias           String   @unique
+  spendPubKey     String   // Public key for receiving payments
+  viewingPubKey   String   // Public key for payment detection
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Optional metadata
+  displayName     String?
+  avatarUrl       String?
+  
+  // Index for fast lookups
+  @@index([alias])
+  @@index([spendPubKey])
+}
+
+// Stealth payment announcements (indexed from Starknet events)
+model StealthAnnouncement {
+  id              String   @id @default(cuid())
+  txHash          String   @unique
+  stealthAddress  String   // The derived stealth address
+  ephemeralPubKey String   // Sender's ephemeral public key
+  token           String   // Token contract address
+  amount          String   // Amount in smallest unit
+  blockNumber     BigInt
+  timestamp       DateTime
+  createdAt       DateTime @default(now())
+  
+  // Index for efficient scanning
+  @@index([stealthAddress])
+  @@index([ephemeralPubKey])
+  @@index([blockNumber])
+  @@index([timestamp])
+}
+
+// Sync state for the indexer
+model IndexerState {
+  id              String   @id @default("main")
+  lastBlockNumber BigInt   @default(0)
+  lastTxHash      String?
+  updatedAt       DateTime @updatedAt
+}

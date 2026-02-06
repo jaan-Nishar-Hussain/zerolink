@@ -14,13 +14,18 @@ import {
 import { deriveStealthAddress, type MetaAddress } from '../../lib/crypto';
 import './Pay.css';
 
-// Mock API call - in production this would call your backend
+// Fetch meta address from API with localStorage fallback
 async function fetchMetaAddress(alias: string): Promise<MetaAddress | null> {
-    // Simulating API call
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Try API first
+    try {
+        const { api } = await import('../../lib/api');
+        const aliasInfo = await api.getAlias(alias);
+        return aliasInfo.metaAddress;
+    } catch (apiError) {
+        console.warn('API fetch failed, trying localStorage:', apiError);
+    }
 
-    // For demo purposes, generate a mock meta address
-    // In production, this would fetch from your backend
+    // Fallback to localStorage
     const stored = localStorage.getItem(`zerolink-meta-${alias}`);
     if (stored) {
         return JSON.parse(stored);

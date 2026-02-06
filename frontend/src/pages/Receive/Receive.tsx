@@ -70,6 +70,14 @@ export function Receive() {
             // Generate stealth keys
             const keys = generateStealthKeys();
 
+            // Register alias with backend (optional - continues even if backend is unavailable)
+            try {
+                const { api } = await import('../../lib/api');
+                await api.registerAlias(alias, keys.metaAddress);
+            } catch (apiError) {
+                console.warn('Backend registration failed (will work offline):', apiError);
+            }
+
             // Save encrypted keys to IndexedDB
             await saveKeys(keys, alias, password);
 
