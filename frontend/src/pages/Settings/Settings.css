@@ -1,0 +1,205 @@
+.settings-page {
+    min-height: calc(100vh - 72px);
+    padding: var(--space-xl);
+}
+
+.settings-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.settings-header {
+    margin-bottom: var(--space-xl);
+}
+
+.settings-header h1 {
+    font-size: var(--text-3xl);
+    font-weight: 700;
+    margin-bottom: var(--space-xs);
+}
+
+/* Settings Section */
+.settings-section {
+    padding: var(--space-lg);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-lg);
+}
+
+.settings-section .section-header {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+    margin-bottom: var(--space-lg);
+}
+
+.section-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--gradient-subtle);
+    border-radius: var(--radius-md);
+    color: var(--color-accent-light);
+    flex-shrink: 0;
+}
+
+.section-icon.danger {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--color-error);
+}
+
+.settings-section .section-header>div:nth-child(2) {
+    flex: 1;
+}
+
+.settings-section .section-header h3 {
+    font-size: var(--text-lg);
+    font-weight: 600;
+    margin-bottom: var(--space-xs);
+}
+
+.section-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    align-items: flex-start;
+}
+
+/* Info Grid */
+.info-grid {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.info-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.info-label {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+}
+
+.info-value {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-weight: 500;
+}
+
+.link-value {
+    padding: var(--space-sm) var(--space-md);
+    background: var(--color-bg-tertiary);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+}
+
+/* Keys Display */
+.keys-display {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    margin-top: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--color-border);
+}
+
+.key-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.key-label {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+}
+
+.key-value {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    background: var(--color-bg-tertiary);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.key-value code {
+    flex: 1;
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    word-break: break-all;
+}
+
+/* Danger Zone */
+.settings-section.danger {
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.btn-danger {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--color-error);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.btn-danger:hover {
+    background: rgba(239, 68, 68, 0.2);
+}
+
+.delete-confirm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.warning-box {
+    display: flex;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: var(--radius-md);
+    color: var(--color-error);
+}
+
+.warning-box strong {
+    display: block;
+    margin-bottom: var(--space-xs);
+}
+
+.warning-box p {
+    font-size: var(--text-sm);
+    opacity: 0.9;
+}
+
+.confirm-actions {
+    display: flex;
+    gap: var(--space-md);
+}
+
+/* Unlock Prompt */
+.unlock-prompt {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-3xl);
+    border-radius: var(--radius-xl);
+    text-align: center;
+    max-width: 400px;
+    margin: var(--space-3xl) auto;
+}
+
+.unlock-prompt h2 {
+    margin-top: var(--space-lg);
+    margin-bottom: var(--space-sm);
+}
+
+.unlock-prompt p {
+    margin-bottom: var(--space-xl);
+}
