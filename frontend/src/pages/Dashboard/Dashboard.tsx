@@ -15,13 +15,16 @@ import {
 import { useAppStore } from '../../store';
 import { TransactionMonitor } from '../../components/TransactionMonitor';
 import { loadKeys, type StealthKeys } from '../../lib/crypto';
+import { withdrawFromStealth } from '../../lib/crypto/withdraw';
 import './Dashboard.css';
 
 export function Dashboard() {
     const [showBalance, setShowBalance] = useState(true);
     const [copied, setCopied] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
     const [stealthKeys, setStealthKeys] = useState<StealthKeys | null>(null);
-    const { alias, payments, isUnlocked } = useAppStore();
+    const { alias, payments, totalReceived, isUnlocked, walletAddress, updatePaymentStatus } = useAppStore();
 
     // Load stealth keys when unlocked
     useEffect(() => {
@@ -32,39 +35,8 @@ export function Dashboard() {
         }
     }, [isUnlocked]);
 
-    // Mock data for demo
-    const mockPayments = payments.length > 0 ? payments : [
-        {
-            id: '1',
-            amount: '0.5',
-            token: 'ETH',
-            txHash: '0x7a3f8c2d9e1b4f7a2c4d1e9f8b3a6c5d7e2f9a1b',
-            ephemeralPubKey: '0x02...',
-            timestamp: Date.now() - 3600000,
-            status: 'confirmed' as const,
-        },
-        {
-            id: '2',
-            amount: '100',
-            token: 'USDC',
-            txHash: '0x9e1b4f7a2c4d1e9f8b3a6c5d7e2f9a1b3c4d5e6f',
-            ephemeralPubKey: '0x03...',
-            timestamp: Date.now() - 86400000,
-            status: 'confirmed' as const,
-        },
-        {
-            id: '3',
-            amount: '0.1',
-            token: 'ETH',
-            txHash: '0x2c4d1e9f8b3a6c5d7e2f9a1b3c4d5e6f7a8b9c0d',
-            ephemeralPubKey: '0x02...',
-            timestamp: Date.now() - 172800000,
-            status: 'withdrawn' as const,
-        },
-    ];
-
-    const totalBalance = showBalance ? '0.60 ETH' : '••••••';
-    const usdValue = showBalance ? '~$1,234.56' : '••••••';
+    const totalBalance = showBalance ? `${parseFloat(totalReceived).toFixed(4)} ETH` : '••••••';
+    const usdValue = showBalance ? `~$${(parseFloat(totalReceived) * 2500).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '••••••';
 
     const copyLink = () => {
         const link = `${window.location.origin}/pay/${alias}`;
@@ -75,12 +47,50 @@ export function Dashboard() {
 
     const formatTime = (timestamp: number) => {
         const diff = Date.now() - timestamp;
+        if (diff < 60000) return 'Just now';
         const hours = Math.floor(diff / 3600000);
         const days = Math.floor(diff / 86400000);
 
         if (days > 0) return `${days}d ago`;
         if (hours > 0) return `${hours}h ago`;
-        return 'Just now';
+        return `${Math.floor(diff / 60000)}m ago`;
+    };
+
+    const handleWithdraw = async (payment: any) => {
+        if (!stealthKeys) {
+            setError('Please unlock your wallet first');
+            return;
+        }
+
+        if (!walletAddress) {
+            setError('Please connect your Starknet wallet');
+            return;
+        }
+
+        setWithdrawingId(payment.id);
+        setError(null);
+
+        try {
+            const result = await withdrawFromStealth({
+                stealthAddress: payment.stealthAddress,
+                ephemeralPubKey: payment.ephemeralPubKey,
+                viewingPrivateKey: stealthKeys.viewingKeyPair.privateKey,
+                spendPrivateKey: stealthKeys.spendKeyPair.privateKey,
+                recipientAddress: walletAddress,
+                amount: payment.amount, // In reality, this would be converted to Wei if needed
+                tokenAddress: payment.tokenAddress,
+            });
+
+            if (result.status === 'pending') {
+                updatePaymentStatus(payment.id, 'withdrawn');
+                alert('Withdrawal transaction submitted! It will appear in your wallet shortly.');
+            }
+        } catch (err: any) {
+            console.error('Withdrawal error:', err);
+            setError(err.message || 'Withdrawal failed');
+        } finally {
+            setWithdrawingId(null);
+        }
     };
 
     const getStatusBadge = (status: string) => {
@@ -156,7 +166,7 @@ export function Dashboard() {
                                 <ArrowDownLeft size={20} />
                             </div>
                         </div>
-                        <div className="stat-value">{mockPayments.length}</div>
+                        <div className="stat-value">{payments.length}</div>
                         <div className="stat-label text-muted">Payments Received</div>
                     </div>
 
@@ -166,7 +176,7 @@ export function Dashboard() {
                                 <Shield size={20} />
                             </div>
                         </div>
-                        <div className="stat-value">{mockPayments.length}</div>
+                        <div className="stat-value">{payments.length}</div>
                         <div className="stat-label text-muted">Stealth Addresses</div>
                     </div>
                 </div>
@@ -200,7 +210,7 @@ export function Dashboard() {
                     </div>
 
                     <div className="transactions-list">
-                        {mockPayments.map((payment) => (
+                        {payments.map((payment) => (
                             <div key={payment.id} className="transaction-card glass">
                                 <div className="tx-icon received">
                                     <ArrowDownLeft size={20} />
@@ -219,9 +229,17 @@ export function Dashboard() {
                                 </div>
                                 <div className="tx-actions">
                                     {payment.status === 'confirmed' && (
-                                        <button className="btn btn-secondary btn-sm">
-                                            <Download size={14} />
-                                            Withdraw
+                                        <button
+                                            className="btn btn-secondary btn-sm"
+                                            onClick={() => handleWithdraw(payment)}
+                                            disabled={withdrawingId === payment.id}
+                                        >
+                                            {withdrawingId === payment.id ? (
+                                                <RefreshCw size={14} className="icon-spin" />
+                                            ) : (
+                                                <Download size={14} />
+                                            )}
+                                            {withdrawingId === payment.id ? 'Withdrawing...' : 'Withdraw'}
                                         </button>
                                     )}
                                     <a
@@ -237,7 +255,7 @@ export function Dashboard() {
                         ))}
                     </div>
 
-                    {mockPayments.length === 0 && (
+                    {payments.length === 0 && (
                         <div className="empty-state">
                             <ArrowDownLeft size={48} className="text-muted" />
                             <h3>No payments yet</h3>

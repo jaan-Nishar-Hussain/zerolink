@@ -123,8 +123,10 @@ export function TransactionMonitor({
                 addPayment({
                     id: payment.txHash,
                     amount: payment.amount,
-                    token: payment.token,
+                    token: getTokenSymbol(payment.token),
+                    tokenAddress: payment.token,
                     txHash: payment.txHash,
+                    stealthAddress: payment.stealthAddress,
                     ephemeralPubKey: payment.ephemeralPubKey,
                     timestamp: Date.now(),
                     status: 'confirmed',

@@ -128,6 +128,24 @@ class ApiClient {
         return this.request('/announcements/stats');
     }
 
+    async announcePayment(announcement: {
+        txHash: string;
+        stealthAddress: string;
+        ephemeralPubKey: string;
+        token: string;
+        amount: string;
+        timestamp: string;
+        blockNumber?: string;
+    }): Promise<{ message: string; id: string }> {
+        return this.request('/announcements', {
+            method: 'POST',
+            body: JSON.stringify({
+                ...announcement,
+                blockNumber: announcement.blockNumber || '0', // Default to 0 for pending
+            }),
+        });
+    }
+
     // Health Check
 
     async healthCheck(): Promise<{ status: string; timestamp: string }> {

@@ -8,6 +8,8 @@ interface Payment {
     token: string;
     txHash: string;
     ephemeralPubKey: string;
+    stealthAddress: string;
+    tokenAddress: string;
     timestamp: number;
     status: 'pending' | 'confirmed' | 'withdrawn';
 }

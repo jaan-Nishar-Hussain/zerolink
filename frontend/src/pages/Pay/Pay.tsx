@@ -11,7 +11,10 @@ import {
     Copy,
     ExternalLink
 } from 'lucide-react';
-import { deriveStealthAddress, type MetaAddress } from '../../lib/crypto';
+import { useAccount, useConnect, useSendTransaction } from '@starknet-react/core';
+import { cairo } from 'starknet';
+import { deriveStealthAddress, parsePublicKeyToCoordinates, type MetaAddress } from '../../lib/crypto';
+import { api } from '../../lib/api';
 import './Pay.css';
 
 // Fetch meta address from API with localStorage fallback
@@ -42,10 +45,19 @@ export function Pay() {
     const [metaAddress, setMetaAddress] = useState<MetaAddress | null>(null);
     const [stealthAddress, setStealthAddress] = useState<string | null>(null);
     const [ephemeralPubKey, setEphemeralPubKey] = useState<string | null>(null);
-    const [txHash, setTxHash] = useState<string | null>(null);
     const [error, setError] = useState('');
+    const [txHash, setTxHash] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [copied, setCopied] = useState(false);
+
+    const { address: userAddress, account } = useAccount();
+    const { connect, connectors } = useConnect();
+    const { sendAsync } = useSendTransaction({
+        calls: []
+    });
+
+    const ETH_ADDRESS = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7';
+    const STEALTH_PAYMENT_CONTRACT = import.meta.env.VITE_STEALTH_PAYMENT_CONTRACT;
 
     useEffect(() => {
         if (alias) {
@@ -86,25 +98,67 @@ export function Pay() {
     };
 
     const handleSend = async () => {
-        setLoading(true);
-
-        try {
-            // In production, this would:
-            // 1. Connect to Starknet wallet
-            // 2. Send transaction to stealth address
-            // 3. Emit ephemeral public key in event
-
-            // Simulating transaction
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            // Mock tx hash
-            setTxHash('0x' + Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join(''));
-            setStep('success');
-        } catch (err) {
-            setError('Transaction failed. Please try again.');
+        if (!account) {
+            setError('Please connect your wallet first');
+            return;
         }
 
-        setLoading(false);
+        setLoading(true);
+        setError('');
+
+        try {
+            if (!stealthAddress || !ephemeralPubKey) {
+                throw new Error('Stealth address not derived');
+            }
+
+            const coords = parsePublicKeyToCoordinates(ephemeralPubKey);
+            const amountWei = BigInt(Math.floor(parseFloat(amount) * 1e18));
+            const amountU256 = cairo.uint256(amountWei);
+
+            const STRK_ADDRESS = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+            const tokenAddress = token === 'ETH' ? ETH_ADDRESS : STRK_ADDRESS;
+
+            const calls = [
+                {
+                    contractAddress: STEALTH_PAYMENT_CONTRACT as string,
+                    entrypoint: token === 'ETH' ? 'send_eth' : 'send_token',
+                    calldata: token === 'ETH'
+                        ? [stealthAddress, coords.x, coords.y]
+                        : [
+                            tokenAddress,
+                            stealthAddress,
+                            amountU256.low,
+                            amountU256.high,
+                            coords.x,
+                            coords.y
+                        ]
+                }
+            ];
+
+            const result = await sendAsync(calls);
+            setTxHash(result.transaction_hash);
+            setStep('success');
+
+            // Notify backend about the payment for faster indexing
+            try {
+                await api.announcePayment({
+                    txHash: result.transaction_hash,
+                    stealthAddress,
+                    ephemeralPubKey,
+                    amount: amountWei.toString(),
+                    token: token === 'ETH' ? ETH_ADDRESS : '0x0',
+                    timestamp: new Date().toISOString()
+                });
+            } catch (backendErr) {
+                console.warn('Backend notification failed, indexer will pick it up eventually:', backendErr);
+            }
+
+        } catch (err: any) {
+            console.error('Send error:', err);
+            setError(err.message || 'Transaction failed. Please try again.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const copyAddress = () => {
@@ -265,30 +319,49 @@ export function Pay() {
                             )}
 
                             <div className="confirm-actions">
-                                <button
-                                    className="btn btn-secondary"
-                                    onClick={() => setStep('amount')}
-                                    disabled={loading}
-                                >
-                                    Back
-                                </button>
-                                <button
-                                    className="btn btn-primary"
-                                    onClick={handleSend}
-                                    disabled={loading}
-                                >
-                                    {loading ? (
-                                        <>
-                                            <Loader2 className="spinner" size={18} />
-                                            Sending...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Send size={18} />
-                                            Send {amount} {token}
-                                        </>
-                                    )}
-                                </button>
+                                {!account ? (
+                                    <div className="wallet-connect-section full-width">
+                                        <p className="text-secondary text-center mb-2">Connect wallet to send payment</p>
+                                        <div className="connector-list">
+                                            {connectors.map((connector) => (
+                                                <button
+                                                    key={connector.id}
+                                                    className="btn btn-secondary full-width mb-1"
+                                                    onClick={() => connect({ connector })}
+                                                >
+                                                    Connect {connector.name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <button
+                                            className="btn btn-secondary"
+                                            onClick={() => setStep('amount')}
+                                            disabled={loading}
+                                        >
+                                            Back
+                                        </button>
+                                        <button
+                                            className="btn btn-primary"
+                                            onClick={handleSend}
+                                            disabled={loading}
+                                        >
+                                            {loading ? (
+                                                <>
+                                                    <Loader2 className="spinner" size={18} />
+                                                    Sending...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Send size={18} />
+                                                    Send {amount} {token}
+                                                </>
+                                            )}
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         </>
                     )}

@@ -509,3 +509,13 @@ export function verifySignature(
         return false;
     }
 }
+/**
+ * Parse a public key hex into X and Y coordinates (as hex strings)
+ */
+export function parsePublicKeyToCoordinates(publicKeyHex: string): { x: string, y: string } {
+    const point = secp256k1.Point.fromHex(publicKeyHex);
+    return {
+        x: '0x' + point.x.toString(16),
+        y: '0x' + point.y.toString(16)
+    };
+}
