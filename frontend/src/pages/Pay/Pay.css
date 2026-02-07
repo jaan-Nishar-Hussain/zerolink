@@ -67,6 +67,18 @@
 .amount-input-wrapper {
     display: flex;
     gap: var(--space-sm);
+    position: relative;
+}
+
+.at-symbol {
+    position: absolute;
+    left: var(--space-md);
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-text-muted);
+    font-size: var(--text-2xl);
+    font-weight: 600;
+    pointer-events: none;
 }
 
 .amount-input {

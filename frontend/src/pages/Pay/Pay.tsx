@@ -39,7 +39,8 @@ async function fetchMetaAddress(alias: string): Promise<MetaAddress | null> {
 
 export function Pay() {
     const { alias } = useParams<{ alias: string }>();
-    const [step, setStep] = useState<'loading' | 'amount' | 'confirm' | 'success' | 'error'>('loading');
+    // If no alias, skip loading state and go directly to amount entry
+    const [step, setStep] = useState<'loading' | 'amount' | 'confirm' | 'success' | 'error'>(alias ? 'loading' : 'amount');
     const [amount, setAmount] = useState('');
     const [token, setToken] = useState('ETH');
     const [metaAddress, setMetaAddress] = useState<MetaAddress | null>(null);
@@ -212,37 +213,83 @@ export function Pay() {
                                 <div className="card-icon">
                                     <Send size={24} />
                                 </div>
-                                <h1>Pay @{alias}</h1>
+                                <h1>{alias ? `Pay @${alias}` : 'Send Payment'}</h1>
                                 <p className="text-secondary">
-                                    Send a private payment to this address
+                                    {alias ? 'Send a private payment to this address' : 'Enter recipient and amount to send a private payment'}
                                 </p>
                             </div>
 
                             <div className="form">
-                                <div className="form-group">
-                                    <label className="label">Amount</label>
-                                    <div className="amount-input-wrapper">
-                                        <input
-                                            type="number"
-                                            className="input amount-input"
-                                            placeholder="0.00"
-                                            value={amount}
-                                            onChange={(e) => setAmount(e.target.value)}
-                                            step="0.001"
-                                            min="0"
-                                        />
-                                        <select
-                                            className="token-select"
-                                            value={token}
-                                            onChange={(e) => setToken(e.target.value)}
-                                        >
-                                            <option value="ETH">ETH</option>
-                                            <option value="USDC">USDC</option>
-                                            <option value="USDT">USDT</option>
-                                            <option value="DAI">DAI</option>
-                                        </select>
+                                {!alias && !metaAddress && (
+                                    <div className="form-group">
+                                        <label className="label">Recipient Alias</label>
+                                        <div className="amount-input-wrapper">
+                                            <span className="at-symbol">@</span>
+                                            <input
+                                                type="text"
+                                                className="input amount-input"
+                                                placeholder="username"
+                                                id="recipientAlias"
+                                                style={{ paddingLeft: '2rem' }}
+                                            />
+                                            <button
+                                                className="btn btn-secondary"
+                                                onClick={async () => {
+                                                    const inputEl = document.getElementById('recipientAlias') as HTMLInputElement;
+                                                    const recipientAlias = inputEl?.value?.trim();
+                                                    if (!recipientAlias) {
+                                                        setError('Please enter a recipient alias');
+                                                        return;
+                                                    }
+                                                    setError('');
+                                                    setLoading(true);
+                                                    try {
+                                                        const meta = await fetchMetaAddress(recipientAlias);
+                                                        if (meta) {
+                                                            setMetaAddress(meta);
+                                                        } else {
+                                                            setError('Recipient not found');
+                                                        }
+                                                    } catch (err) {
+                                                        setError('Failed to lookup recipient');
+                                                    } finally {
+                                                        setLoading(false);
+                                                    }
+                                                }}
+                                                disabled={loading}
+                                            >
+                                                {loading ? <Loader2 className="spinner" size={16} /> : 'Lookup'}
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
+                                )}
+
+                                {(alias || metaAddress) && (
+                                    <div className="form-group">
+                                        <label className="label">Amount</label>
+                                        <div className="amount-input-wrapper">
+                                            <input
+                                                type="number"
+                                                className="input amount-input"
+                                                placeholder="0.00"
+                                                value={amount}
+                                                onChange={(e) => setAmount(e.target.value)}
+                                                step="0.001"
+                                                min="0"
+                                            />
+                                            <select
+                                                className="token-select"
+                                                value={token}
+                                                onChange={(e) => setToken(e.target.value)}
+                                            >
+                                                <option value="ETH">ETH</option>
+                                                <option value="USDC">USDC</option>
+                                                <option value="USDT">USDT</option>
+                                                <option value="DAI">DAI</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {error && (
                                     <div className="error-message">
@@ -251,13 +298,15 @@ export function Pay() {
                                     </div>
                                 )}
 
-                                <button
-                                    className="btn btn-primary btn-lg full-width"
-                                    onClick={handleContinue}
-                                >
-                                    Continue
-                                    <ArrowRight size={18} />
-                                </button>
+                                {(alias || metaAddress) && (
+                                    <button
+                                        className="btn btn-primary btn-lg full-width"
+                                        onClick={handleContinue}
+                                    >
+                                        Continue
+                                        <ArrowRight size={18} />
+                                    </button>
+                                )}
 
                                 <div className="privacy-note">
                                     <Shield size={14} className="text-accent" />
@@ -267,6 +316,7 @@ export function Pay() {
                                 </div>
                             </div>
                         </>
+
                     )}
 
                     {step === 'confirm' && (
