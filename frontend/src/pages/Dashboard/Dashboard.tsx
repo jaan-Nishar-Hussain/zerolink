@@ -10,7 +10,14 @@ import {
     RefreshCw,
     Eye,
     EyeOff,
-    Download
+    Download,
+    Send,
+    History,
+    Link as LinkIcon,
+    QrCode,
+    Edit3,
+    LayoutGrid,
+    DollarSign
 } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { TransactionMonitor } from '../../components/TransactionMonitor';
@@ -24,19 +31,19 @@ export function Dashboard() {
     const [error, setError] = useState<string | null>(null);
     const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
     const [stealthKeys, setStealthKeys] = useState<StealthKeys | null>(null);
+    const [activeTab, setActiveTab] = useState<'username' | 'address'>('username');
+    const [activeNav, setActiveNav] = useState<'dashboard' | 'links' | 'transactions'>('dashboard');
     const { alias, payments, totalReceived, isUnlocked, walletAddress, updatePaymentStatus } = useAppStore();
 
     // Load stealth keys when unlocked
     useEffect(() => {
         if (isUnlocked) {
             // Note: In production, we'd need the password from session
-            // For now, this is a placeholder for the keys loading logic
-            // stealthKeys would be passed from the unlock flow
         }
     }, [isUnlocked]);
 
-    const totalBalance = showBalance ? `${parseFloat(totalReceived).toFixed(4)} ETH` : '••••••';
-    const usdValue = showBalance ? `~$${(parseFloat(totalReceived) * 2500).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '••••••';
+    const totalBalance = parseFloat(totalReceived).toFixed(6);
+    const paymentLink = `${alias}.zerolink.pay`;
 
     const copyLink = () => {
         const link = `${window.location.origin}/pay/${alias}`;
@@ -77,7 +84,7 @@ export function Dashboard() {
                 viewingPrivateKey: stealthKeys.viewingKeyPair.privateKey,
                 spendPrivateKey: stealthKeys.spendKeyPair.privateKey,
                 recipientAddress: walletAddress,
-                amount: payment.amount, // In reality, this would be converted to Wei if needed
+                amount: payment.amount,
                 tokenAddress: payment.tokenAddress,
             });
 
@@ -110,7 +117,7 @@ export function Dashboard() {
         return (
             <div className="dashboard-page">
                 <div className="dashboard-container">
-                    <div className="unlock-prompt glass">
+                    <div className="unlock-prompt">
                         <Shield size={48} className="text-accent" />
                         <h2>Unlock Your Dashboard</h2>
                         <p className="text-secondary">
@@ -128,146 +135,177 @@ export function Dashboard() {
     return (
         <div className="dashboard-page">
             <div className="dashboard-container">
-                {/* Header */}
-                <div className="dashboard-header animate-fade-in">
-                    <div>
-                        <h1>Dashboard</h1>
-                        <p className="text-secondary">Manage your private payments</p>
+                {/* Receive Card Section */}
+                <div className="receive-card-section animate-fade-in">
+                    <div className="receive-card-header">
+                        <h3>Receive</h3>
+                        <div className="receive-tabs">
+                            <button
+                                className={`receive-tab ${activeTab === 'username' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('username')}
+                            >
+                                Username
+                            </button>
+                            <button
+                                className={`receive-tab ${activeTab === 'address' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('address')}
+                            >
+                                Address
+                            </button>
+                        </div>
                     </div>
-                    <div className="header-actions">
-                        <button className="btn btn-ghost">
-                            <RefreshCw size={18} />
-                            Rescan
-                        </button>
+                    <div className="receive-link-box">
+                        <span className="receive-link-text">{paymentLink}</span>
+                        <div className="receive-link-actions">
+                            <button className="icon-btn">
+                                <Edit3 size={18} />
+                            </button>
+                            <button className="icon-btn">
+                                <QrCode size={18} />
+                            </button>
+                            <button className="icon-btn" onClick={copyLink}>
+                                {copied ? <Check size={18} /> : <Copy size={18} />}
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                {/* Stats Grid */}
-                <div className="stats-grid">
-                    <div className="stat-card glass animate-slide-up">
-                        <div className="stat-header">
-                            <div className="stat-icon">
-                                <Wallet size={20} />
+                {/* Balance Card */}
+                <div className="balance-card animate-slide-up">
+                    <div className="balance-header">
+                        <div className="balance-label">Available Balance</div>
+                        <div className="balance-sublabel">Held in treasury wallet</div>
+                    </div>
+                    <div className="balance-amount">
+                        {showBalance ? totalBalance : '••••••'} <span>ETH</span>
+                    </div>
+
+                    {/* Portfolio Section */}
+                    <div className="portfolio-section">
+                        <div className="portfolio-header">
+                            <div>
+                                <div className="portfolio-title">Portfolio Balance</div>
+                                <div className="portfolio-subtitle">Last 7 days trend</div>
                             </div>
                             <button
-                                className="btn btn-ghost"
+                                className="icon-btn"
                                 onClick={() => setShowBalance(!showBalance)}
                             >
                                 {showBalance ? <EyeOff size={18} /> : <Eye size={18} />}
                             </button>
                         </div>
-                        <div className="stat-value">{totalBalance}</div>
-                        <div className="stat-label text-muted">{usdValue}</div>
-                    </div>
-
-                    <div className="stat-card glass animate-slide-up" style={{ animationDelay: '0.1s' }}>
-                        <div className="stat-header">
-                            <div className="stat-icon">
-                                <ArrowDownLeft size={20} />
-                            </div>
+                        <div className="portfolio-chart">
+                            {/* Simple chart bars */}
+                            {[40, 60, 30, 70, 50, 80, 45].map((height, i) => (
+                                <div
+                                    key={i}
+                                    className="chart-bar"
+                                    style={{ height: `${height}%` }}
+                                />
+                            ))}
                         </div>
-                        <div className="stat-value">{payments.length}</div>
-                        <div className="stat-label text-muted">Payments Received</div>
-                    </div>
-
-                    <div className="stat-card glass animate-slide-up" style={{ animationDelay: '0.2s' }}>
-                        <div className="stat-header">
-                            <div className="stat-icon">
-                                <Shield size={20} />
-                            </div>
-                        </div>
-                        <div className="stat-value">{payments.length}</div>
-                        <div className="stat-label text-muted">Stealth Addresses</div>
                     </div>
                 </div>
 
-                {/* Payment Link Card */}
-                <div className="link-card glass animate-slide-up" style={{ animationDelay: '0.3s' }}>
-                    <div className="link-card-header">
-                        <div>
-                            <h3>Your Payment Link</h3>
-                            <p className="text-muted">Share this link to receive private payments</p>
-                        </div>
-                    </div>
-                    <div className="link-box">
-                        <span className="link-text mono">
-                            {window.location.origin}/pay/{alias}
-                        </span>
-                        <button
-                            className="btn btn-secondary"
-                            onClick={copyLink}
-                        >
-                            {copied ? <Check size={18} /> : <Copy size={18} />}
-                            {copied ? 'Copied!' : 'Copy'}
+                {/* Action Buttons */}
+                <div className="action-buttons animate-slide-up" style={{ animationDelay: '0.1s' }}>
+                    <a href="/pay" className="action-btn action-btn-primary">
+                        <Send size={18} style={{ marginRight: '8px' }} />
+                        Send Payment
+                    </a>
+                    <div className="action-btn-row">
+                        <button className="action-btn action-btn-secondary">
+                            <Download size={18} style={{ marginRight: '8px' }} />
+                            Withdraw
+                        </button>
+                        <button className="action-btn action-btn-secondary">
+                            <History size={18} style={{ marginRight: '8px' }} />
+                            History
                         </button>
                     </div>
                 </div>
 
-                {/* Transactions */}
-                <div className="transactions-section animate-slide-up" style={{ animationDelay: '0.4s' }}>
+                {/* Payment Links Section */}
+                <div className="payment-links-section animate-slide-up" style={{ animationDelay: '0.2s' }}>
                     <div className="section-header">
-                        <h2>Recent Payments</h2>
+                        <h2>Payment Links</h2>
+                        <button className="see-more-btn">See More</button>
                     </div>
-
-                    <div className="transactions-list">
-                        {payments.map((payment) => (
-                            <div key={payment.id} className="transaction-card glass">
-                                <div className="tx-icon received">
-                                    <ArrowDownLeft size={20} />
-                                </div>
-                                <div className="tx-details">
-                                    <div className="tx-amount">
-                                        +{payment.amount} {payment.token}
-                                    </div>
-                                    <div className="tx-meta text-muted">
-                                        <Clock size={12} />
-                                        {formatTime(payment.timestamp)}
-                                    </div>
-                                </div>
-                                <div className="tx-status">
-                                    {getStatusBadge(payment.status)}
-                                </div>
-                                <div className="tx-actions">
-                                    {payment.status === 'confirmed' && (
-                                        <button
-                                            className="btn btn-secondary btn-sm"
-                                            onClick={() => handleWithdraw(payment)}
-                                            disabled={withdrawingId === payment.id}
-                                        >
-                                            {withdrawingId === payment.id ? (
-                                                <RefreshCw size={14} className="icon-spin" />
-                                            ) : (
-                                                <Download size={14} />
-                                            )}
-                                            {withdrawingId === payment.id ? 'Withdrawing...' : 'Withdraw'}
-                                        </button>
-                                    )}
-                                    <a
-                                        href={`https://starkscan.co/tx/${payment.txHash}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="btn btn-ghost btn-sm"
-                                    >
-                                        <ExternalLink size={14} />
-                                    </a>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-
-                    {payments.length === 0 && (
-                        <div className="empty-state">
-                            <ArrowDownLeft size={48} className="text-muted" />
-                            <h3>No payments yet</h3>
-                            <p className="text-muted">
-                                Share your payment link to start receiving private payments
-                            </p>
+                    <div className="payment-link-card">
+                        <div className="payment-link-url">{paymentLink}</div>
+                        <div className="payment-link-logo">
+                            <Shield size={40} />
                         </div>
-                    )}
+                        <div className="payment-link-brand">ZEROLINK</div>
+                    </div>
                 </div>
 
+                {/* Recent Payments */}
+                {payments.length > 0 && (
+                    <div className="transactions-section animate-slide-up" style={{ animationDelay: '0.3s' }}>
+                        <div className="section-header">
+                            <h2>Recent Payments</h2>
+                        </div>
+                        <div className="transactions-list">
+                            {payments.map((payment) => (
+                                <div key={payment.id} className="transaction-card">
+                                    <div className="tx-icon received">
+                                        <ArrowDownLeft size={20} />
+                                    </div>
+                                    <div className="tx-details">
+                                        <div className="tx-amount">
+                                            +{payment.amount} {payment.token}
+                                        </div>
+                                        <div className="tx-meta">
+                                            <Clock size={12} />
+                                            {formatTime(payment.timestamp)}
+                                        </div>
+                                    </div>
+                                    <div className="tx-status">
+                                        {getStatusBadge(payment.status)}
+                                    </div>
+                                    <div className="tx-actions">
+                                        {payment.status === 'confirmed' && (
+                                            <button
+                                                className="btn btn-secondary btn-sm"
+                                                onClick={() => handleWithdraw(payment)}
+                                                disabled={withdrawingId === payment.id}
+                                            >
+                                                {withdrawingId === payment.id ? (
+                                                    <RefreshCw size={14} className="spinner" />
+                                                ) : (
+                                                    <Download size={14} />
+                                                )}
+                                                {withdrawingId === payment.id ? 'Withdrawing...' : 'Withdraw'}
+                                            </button>
+                                        )}
+                                        <a
+                                            href={`https://starkscan.co/tx/${payment.txHash}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="btn btn-ghost btn-sm"
+                                        >
+                                            <ExternalLink size={14} />
+                                        </a>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {payments.length === 0 && (
+                    <div className="empty-state animate-slide-up" style={{ animationDelay: '0.3s' }}>
+                        <ArrowDownLeft size={48} className="text-muted" />
+                        <h3>No payments yet</h3>
+                        <p className="text-muted">
+                            Share your payment link to start receiving private payments
+                        </p>
+                    </div>
+                )}
+
                 {/* Transaction Monitor */}
-                <div className="monitor-section animate-slide-up" style={{ animationDelay: '0.5s' }}>
+                <div className="monitor-section">
                     <TransactionMonitor
                         stealthKeys={stealthKeys || undefined}
                         autoScan={true}
@@ -275,6 +313,31 @@ export function Dashboard() {
                     />
                 </div>
             </div>
+
+            {/* Bottom Navigation */}
+            <nav className="bottom-nav">
+                <button
+                    className={`bottom-nav-item ${activeNav === 'dashboard' ? 'active' : ''}`}
+                    onClick={() => setActiveNav('dashboard')}
+                >
+                    <LayoutGrid size={18} />
+                    Dashboard
+                </button>
+                <button
+                    className={`bottom-nav-item ${activeNav === 'links' ? 'active' : ''}`}
+                    onClick={() => setActiveNav('links')}
+                >
+                    <LinkIcon size={18} />
+                    Payment Links
+                </button>
+                <button
+                    className={`bottom-nav-item ${activeNav === 'transactions' ? 'active' : ''}`}
+                    onClick={() => setActiveNav('transactions')}
+                >
+                    <DollarSign size={18} />
+                    Transactions
+                </button>
+            </nav>
         </div>
     );
 }

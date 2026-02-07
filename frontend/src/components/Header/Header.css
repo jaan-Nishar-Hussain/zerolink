@@ -2,7 +2,7 @@
     position: sticky;
     top: 0;
     z-index: 100;
-    background: rgba(10, 10, 15, 0.8);
+    background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(20px);
     border-bottom: 1px solid var(--color-border);
 }
@@ -10,7 +10,7 @@
 .header-container {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 0 var(--space-lg);
+    padding: 0 var(--space-xl);
     height: 72px;
     display: flex;
     align-items: center;
@@ -32,13 +32,13 @@
 
 .logo-icon {
     color: var(--color-accent);
+    width: 32px;
+    height: 32px;
 }
 
 .logo-text {
-    background: var(--gradient-primary);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: var(--color-text-primary);
+    font-weight: 700;
 }
 
 .nav {
@@ -53,7 +53,7 @@
     gap: var(--space-sm);
     padding: var(--space-sm) var(--space-md);
     color: var(--color-text-secondary);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-full);
     font-size: var(--text-sm);
     font-weight: 500;
     transition: all var(--transition-fast);
@@ -61,12 +61,17 @@
 
 .nav-link:hover {
     color: var(--color-text-primary);
-    background: var(--color-surface);
+    background: var(--color-bg-tertiary);
 }
 
 .nav-link-active {
-    color: var(--color-accent-light);
-    background: rgba(124, 58, 237, 0.1);
+    color: white;
+    background: var(--color-accent);
+}
+
+.nav-link-active:hover {
+    color: white;
+    background: var(--color-accent-dark);
 }
 
 .header-actions {
@@ -79,10 +84,10 @@
     display: flex;
     align-items: center;
     padding: var(--space-xs) var(--space-md);
-    background: rgba(124, 58, 237, 0.1);
-    border: 1px solid rgba(124, 58, 237, 0.2);
+    background: var(--color-accent-bg);
+    border: 1px solid rgba(59, 91, 219, 0.2);
     border-radius: var(--radius-full);
-    color: var(--color-accent-light);
+    color: var(--color-accent);
     font-weight: 600;
     font-size: var(--text-sm);
 }
@@ -125,7 +130,7 @@
         display: block;
     }
 
-    .wallet-info {
+    .alias-badge {
         display: none;
     }
 }

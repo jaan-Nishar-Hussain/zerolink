@@ -1,10 +1,11 @@
 .settings-page {
     min-height: calc(100vh - 72px);
     padding: var(--space-xl);
+    background: var(--color-bg-primary);
 }
 
 .settings-container {
-    max-width: 800px;
+    max-width: 600px;
     margin: 0 auto;
 }
 
@@ -13,16 +14,19 @@
 }
 
 .settings-header h1 {
-    font-size: var(--text-3xl);
+    font-size: var(--text-2xl);
     font-weight: 700;
     margin-bottom: var(--space-xs);
+    color: var(--color-text-primary);
 }
 
 /* Settings Section */
 .settings-section {
+    background: white;
     padding: var(--space-lg);
     border-radius: var(--radius-lg);
     margin-bottom: var(--space-lg);
+    box-shadow: var(--shadow-card);
 }
 
 .settings-section .section-header {
@@ -38,14 +42,14 @@
     justify-content: center;
     width: 40px;
     height: 40px;
-    background: var(--gradient-subtle);
+    background: var(--color-accent-bg);
     border-radius: var(--radius-md);
-    color: var(--color-accent-light);
+    color: var(--color-accent);
     flex-shrink: 0;
 }
 
 .section-icon.danger {
-    background: rgba(239, 68, 68, 0.1);
+    background: var(--color-error-bg);
     color: var(--color-error);
 }
 
@@ -57,6 +61,7 @@
     font-size: var(--text-lg);
     font-weight: 600;
     margin-bottom: var(--space-xs);
+    color: var(--color-text-primary);
 }
 
 .section-content {
@@ -89,6 +94,7 @@
     align-items: center;
     gap: var(--space-sm);
     font-weight: 500;
+    color: var(--color-text-primary);
 }
 
 .link-value {
@@ -142,7 +148,7 @@
 }
 
 .btn-danger {
-    background: rgba(239, 68, 68, 0.1);
+    background: var(--color-error-bg);
     color: var(--color-error);
     border: 1px solid rgba(239, 68, 68, 0.2);
 }
@@ -161,7 +167,7 @@
     display: flex;
     gap: var(--space-md);
     padding: var(--space-md);
-    background: rgba(239, 68, 68, 0.1);
+    background: var(--color-error-bg);
     border: 1px solid rgba(239, 68, 68, 0.2);
     border-radius: var(--radius-md);
     color: var(--color-error);
@@ -189,17 +195,21 @@
     align-items: center;
     justify-content: center;
     padding: var(--space-3xl);
+    background: white;
     border-radius: var(--radius-xl);
     text-align: center;
     max-width: 400px;
     margin: var(--space-3xl) auto;
+    box-shadow: var(--shadow-lg);
 }
 
 .unlock-prompt h2 {
     margin-top: var(--space-lg);
     margin-bottom: var(--space-sm);
+    color: var(--color-text-primary);
 }
 
 .unlock-prompt p {
     margin-bottom: var(--space-xl);
+    color: var(--color-text-secondary);
 }

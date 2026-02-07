@@ -8,20 +8,21 @@
     align-items: center;
     gap: var(--space-sm);
     padding: var(--space-sm) var(--space-md);
-    background: var(--gradient-primary);
+    background: var(--color-accent);
     color: white;
     border: none;
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-full);
     font-family: var(--font-sans);
     font-size: var(--text-sm);
-    font-weight: 500;
+    font-weight: 600;
     cursor: pointer;
     transition: all var(--transition-fast);
 }
 
 .wallet-button:hover {
+    background: var(--color-accent-dark);
     transform: translateY(-1px);
-    box-shadow: var(--shadow-md), var(--shadow-glow);
+    box-shadow: var(--shadow-button);
 }
 
 .wallet-button.connecting {
@@ -30,7 +31,8 @@
 }
 
 .wallet-button.connected {
-    background: var(--color-surface);
+    background: var(--color-bg-tertiary);
+    color: var(--color-text-primary);
     border: 1px solid var(--color-border);
 }
 
@@ -57,10 +59,11 @@
     top: calc(100% + 8px);
     right: 0;
     min-width: 200px;
-    background: var(--color-bg-secondary);
+    background: white;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     padding: var(--space-sm);
+    box-shadow: var(--shadow-lg);
     z-index: 100;
     animation: fadeIn var(--transition-fast) ease-out;
 }
@@ -91,7 +94,7 @@
 }
 
 .dropdown-item:hover {
-    background: var(--color-surface);
+    background: var(--color-bg-tertiary);
 }
 
 .dropdown-item.wallet-option {
@@ -103,7 +106,7 @@
 }
 
 .dropdown-item.disconnect:hover {
-    background: rgba(239, 68, 68, 0.1);
+    background: var(--color-error-bg);
 }
 
 .dropdown-divider {

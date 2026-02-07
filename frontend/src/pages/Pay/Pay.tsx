@@ -6,7 +6,6 @@ import {
     Check,
     AlertCircle,
     Loader2,
-    ArrowRight,
     Wallet,
     Copy,
     ExternalLink
@@ -38,9 +37,8 @@ async function fetchMetaAddress(alias: string): Promise<MetaAddress | null> {
 }
 
 export function Pay() {
-    const { alias } = useParams<{ alias: string }>();
-    // If no alias, skip loading state and go directly to amount entry
-    const [step, setStep] = useState<'loading' | 'amount' | 'confirm' | 'success' | 'error'>(alias ? 'loading' : 'amount');
+    const { alias: urlAlias } = useParams<{ alias: string }>();
+
     const [amount, setAmount] = useState('');
     const [token, setToken] = useState('ETH');
     const [metaAddress, setMetaAddress] = useState<MetaAddress | null>(null);
@@ -50,6 +48,10 @@ export function Pay() {
     const [txHash, setTxHash] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [recipientAlias, setRecipientAlias] = useState('');
+    const [recipientLoading, setRecipientLoading] = useState(!!urlAlias);
+    const [step, setStep] = useState<'amount' | 'confirm' | 'success'>('amount');
+    const [lookupComplete, setLookupComplete] = useState(false);
 
     const { address: userAddress, account } = useAccount();
     const { connect, connectors } = useConnect();
@@ -60,41 +62,90 @@ export function Pay() {
     const ETH_ADDRESS = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7';
     const STEALTH_PAYMENT_CONTRACT = import.meta.env.VITE_STEALTH_PAYMENT_CONTRACT;
 
-    useEffect(() => {
-        if (alias) {
-            loadRecipient();
-        }
-    }, [alias]);
+    // The display alias is the URL alias or the manually entered one
+    const displayAlias = urlAlias || recipientAlias;
 
-    const loadRecipient = async () => {
+    // Show amount input if we have a URL alias OR we have loaded a metaAddress OR lookup is complete
+    const showAmountInput = !!urlAlias || !!metaAddress || lookupComplete;
+
+    useEffect(() => {
+        if (urlAlias) {
+            loadRecipient(urlAlias);
+        }
+    }, [urlAlias]);
+
+    const loadRecipient = async (alias: string) => {
+        setRecipientLoading(true);
         try {
-            const meta = await fetchMetaAddress(alias!);
+            const meta = await fetchMetaAddress(alias);
             if (meta) {
                 setMetaAddress(meta);
-                setStep('amount');
-            } else {
-                setError('Payment link not found');
-                setStep('error');
             }
+            // Even if not found, we still show the amount input - error will be shown on send
         } catch (err) {
-            setError('Failed to load recipient');
-            setStep('error');
+            console.error('Failed to load recipient:', err);
+        } finally {
+            setRecipientLoading(false);
         }
     };
 
-    const handleContinue = () => {
+    const handleLookup = async () => {
+        if (!recipientAlias.trim()) {
+            setError('Please enter a recipient alias');
+            return;
+        }
+        setError('');
+        setLoading(true);
+        try {
+            const meta = await fetchMetaAddress(recipientAlias.trim());
+            if (meta) {
+                setMetaAddress(meta);
+                setLookupComplete(true);
+                setError('');
+            } else {
+                setError('Recipient not found');
+            }
+        } catch (err) {
+            setError('Failed to lookup recipient');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleContinue = async () => {
         if (!amount || parseFloat(amount) <= 0) {
             setError('Please enter a valid amount');
             return;
         }
-        setError('');
 
-        // Derive stealth address
-        if (metaAddress) {
-            const stealth = deriveStealthAddress(metaAddress);
+        setError('');
+        setLoading(true);
+
+        try {
+            // If we don't have metaAddress yet, try to load it now
+            let meta = metaAddress;
+            if (!meta && displayAlias) {
+                meta = await fetchMetaAddress(displayAlias);
+                if (meta) {
+                    setMetaAddress(meta);
+                }
+            }
+
+            if (!meta) {
+                setError('Recipient not found. Please check the username.');
+                setLoading(false);
+                return;
+            }
+
+            // Derive stealth address
+            const stealth = deriveStealthAddress(meta);
             setStealthAddress(stealth.address);
             setEphemeralPubKey(stealth.ephemeralPubKey);
             setStep('confirm');
+        } catch (err: any) {
+            setError(err.message || 'Failed to prepare payment');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -170,9 +221,11 @@ export function Pay() {
         }
     };
 
-    if (step === 'loading') {
+    // Show loading while fetching recipient from URL
+    if (recipientLoading) {
         return (
             <div className="pay-page">
+                <Shield className="pay-logo" size={80} />
                 <div className="pay-container">
                     <div className="loading-state">
                         <Loader2 className="spinner" size={32} />
@@ -183,79 +236,57 @@ export function Pay() {
         );
     }
 
-    if (step === 'error') {
-        return (
-            <div className="pay-page">
-                <div className="pay-container">
-                    <div className="pay-card glass">
-                        <div className="card-header">
-                            <div className="card-icon error">
-                                <AlertCircle size={24} />
-                            </div>
-                            <h1>Link Not Found</h1>
-                            <p className="text-secondary">
-                                This payment link doesn't exist or has been removed.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
     return (
-        <div className="pay-page glow-bg">
+        <div className="pay-page">
+            <Shield className="pay-logo" size={80} />
             <div className="pay-container animate-slide-up">
-                <div className="pay-card glass">
+                <div className="pay-card">
                     {step === 'amount' && (
                         <>
                             <div className="card-header">
-                                <div className="card-icon">
-                                    <Send size={24} />
-                                </div>
-                                <h1>{alias ? `Pay @${alias}` : 'Send Payment'}</h1>
-                                <p className="text-secondary">
-                                    {alias ? 'Send a private payment to this address' : 'Enter recipient and amount to send a private payment'}
-                                </p>
+                                <h1>
+                                    {displayAlias ? (
+                                        <>Send to <span className="highlight">@{displayAlias}</span></>
+                                    ) : (
+                                        'Send Payment'
+                                    )}
+                                </h1>
+                                {displayAlias && (
+                                    <p className="text-secondary">{displayAlias}.zerolink.pay</p>
+                                )}
                             </div>
 
+                            {/* Wallet Status */}
+                            {account && (
+                                <div className="wallet-status">
+                                    <div>
+                                        <div className="wallet-status-label">Wallet Connected</div>
+                                        <div className="wallet-status-address">
+                                            {userAddress?.slice(0, 8)}...{userAddress?.slice(-6)}
+                                        </div>
+                                    </div>
+                                    <Check size={20} className="wallet-status-icon" />
+                                </div>
+                            )}
+
                             <div className="form">
-                                {!alias && !metaAddress && (
+                                {/* Show recipient lookup ONLY if no URL alias AND no metaAddress yet */}
+                                {!showAmountInput && (
                                     <div className="form-group">
-                                        <label className="label">Recipient Alias</label>
+                                        <label className="label">Recipient</label>
                                         <div className="amount-input-wrapper">
                                             <span className="at-symbol">@</span>
                                             <input
                                                 type="text"
                                                 className="input amount-input"
                                                 placeholder="username"
-                                                id="recipientAlias"
-                                                style={{ paddingLeft: '2rem' }}
+                                                value={recipientAlias}
+                                                onChange={(e) => setRecipientAlias(e.target.value.toLowerCase())}
+                                                style={{ paddingLeft: '2.5rem' }}
                                             />
                                             <button
                                                 className="btn btn-secondary"
-                                                onClick={async () => {
-                                                    const inputEl = document.getElementById('recipientAlias') as HTMLInputElement;
-                                                    const recipientAlias = inputEl?.value?.trim();
-                                                    if (!recipientAlias) {
-                                                        setError('Please enter a recipient alias');
-                                                        return;
-                                                    }
-                                                    setError('');
-                                                    setLoading(true);
-                                                    try {
-                                                        const meta = await fetchMetaAddress(recipientAlias);
-                                                        if (meta) {
-                                                            setMetaAddress(meta);
-                                                        } else {
-                                                            setError('Recipient not found');
-                                                        }
-                                                    } catch (err) {
-                                                        setError('Failed to lookup recipient');
-                                                    } finally {
-                                                        setLoading(false);
-                                                    }
-                                                }}
+                                                onClick={handleLookup}
                                                 disabled={loading}
                                             >
                                                 {loading ? <Loader2 className="spinner" size={16} /> : 'Lookup'}
@@ -264,30 +295,26 @@ export function Pay() {
                                     </div>
                                 )}
 
-                                {(alias || metaAddress) && (
-                                    <div className="form-group">
-                                        <label className="label">Amount</label>
-                                        <div className="amount-input-wrapper">
-                                            <input
-                                                type="number"
-                                                className="input amount-input"
-                                                placeholder="0.00"
-                                                value={amount}
-                                                onChange={(e) => setAmount(e.target.value)}
-                                                step="0.001"
-                                                min="0"
-                                            />
-                                            <select
-                                                className="token-select"
-                                                value={token}
-                                                onChange={(e) => setToken(e.target.value)}
-                                            >
-                                                <option value="ETH">ETH</option>
-                                                <option value="USDC">USDC</option>
-                                                <option value="USDT">USDT</option>
-                                                <option value="DAI">DAI</option>
-                                            </select>
-                                        </div>
+                                {/* Show amount input when we have a recipient (URL alias or looked up) */}
+                                {showAmountInput && (
+                                    <div className="amount-section">
+                                        <div className="amount-label">Amount ({token})</div>
+                                        <input
+                                            type="number"
+                                            className="input amount-input"
+                                            placeholder="0.00"
+                                            value={amount}
+                                            onChange={(e) => setAmount(e.target.value)}
+                                            step="0.001"
+                                            min="0"
+                                            style={{
+                                                background: 'transparent',
+                                                border: 'none',
+                                                fontSize: '1.5rem',
+                                                padding: '0'
+                                            }}
+                                        />
+                                        <div className="amount-hint">Enter the amount you want to send</div>
                                     </div>
                                 )}
 
@@ -298,25 +325,31 @@ export function Pay() {
                                     </div>
                                 )}
 
-                                {(alias || metaAddress) && (
+                                {showAmountInput && (
                                     <button
                                         className="btn btn-primary btn-lg full-width"
                                         onClick={handleContinue}
+                                        disabled={loading}
                                     >
-                                        Continue
-                                        <ArrowRight size={18} />
+                                        {loading ? (
+                                            <>
+                                                <Loader2 className="spinner" size={18} />
+                                                Processing...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Send size={18} />
+                                                Send {amount || '0'} {token}
+                                            </>
+                                        )}
                                     </button>
                                 )}
 
-                                <div className="privacy-note">
-                                    <Shield size={14} className="text-accent" />
-                                    <span className="text-muted">
-                                        Your payment will be sent to a unique stealth address
-                                    </span>
-                                </div>
+                                <p className="payment-footer">
+                                    Funds will be sent to a stealth address. The recipient can withdraw anytime.
+                                </p>
                             </div>
                         </>
-
                     )}
 
                     {step === 'confirm' && (
@@ -334,7 +367,7 @@ export function Pay() {
                             <div className="confirm-details">
                                 <div className="detail-row">
                                     <span className="detail-label">Recipient</span>
-                                    <span className="detail-value">@{alias}</span>
+                                    <span className="detail-value">@{displayAlias}</span>
                                 </div>
                                 <div className="detail-row">
                                     <span className="detail-label">Amount</span>
@@ -355,7 +388,7 @@ export function Pay() {
                                 <Shield size={16} className="text-accent" />
                                 <div>
                                     <strong>Privacy Protected</strong>
-                                    <p className="text-muted">
+                                    <p>
                                         This stealth address is unique to this payment. The recipient will be notified through our protocol.
                                     </p>
                                 </div>
@@ -435,7 +468,7 @@ export function Pay() {
                                 </div>
                                 <div className="detail-row">
                                     <span className="detail-label">To</span>
-                                    <span className="detail-value">@{alias}</span>
+                                    <span className="detail-value">@{displayAlias}</span>
                                 </div>
                                 <div className="detail-row">
                                     <span className="detail-label">Transaction</span>
