@@ -40,7 +40,7 @@ export function Pay() {
     const { alias: urlAlias } = useParams<{ alias: string }>();
 
     const [amount, setAmount] = useState('');
-    const [token, setToken] = useState('ETH');
+    const [token, setToken] = useState('STRK');
     const [metaAddress, setMetaAddress] = useState<MetaAddress | null>(null);
     const [stealthAddress, setStealthAddress] = useState<string | null>(null);
     const [ephemeralPubKey, setEphemeralPubKey] = useState<string | null>(null);
@@ -60,6 +60,7 @@ export function Pay() {
     });
 
     const ETH_ADDRESS = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7';
+    const STRK_ADDRESS = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
     const STEALTH_PAYMENT_CONTRACT = import.meta.env.VITE_STEALTH_PAYMENT_CONTRACT;
 
     // The display alias is the URL alias or the manually entered one
@@ -167,23 +168,34 @@ export function Pay() {
             const amountWei = BigInt(Math.floor(parseFloat(amount) * 1e18));
             const amountU256 = cairo.uint256(amountWei);
 
-            const STRK_ADDRESS = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
             const tokenAddress = token === 'ETH' ? ETH_ADDRESS : STRK_ADDRESS;
 
+            // On Starknet, ETH is an ERC20-like token, so we need to:
+            // 1. Approve the stealth payment contract to spend our tokens
+            // 2. Call send_token (not send_eth) which does transfer_from
             const calls = [
+                // Step 1: Approve the stealth payment contract to spend the token
+                {
+                    contractAddress: tokenAddress,
+                    entrypoint: 'approve',
+                    calldata: [
+                        STEALTH_PAYMENT_CONTRACT as string,
+                        amountU256.low.toString(),
+                        amountU256.high.toString()
+                    ]
+                },
+                // Step 2: Call send_token which will transfer_from the approved amount
                 {
                     contractAddress: STEALTH_PAYMENT_CONTRACT as string,
-                    entrypoint: token === 'ETH' ? 'send_eth' : 'send_token',
-                    calldata: token === 'ETH'
-                        ? [stealthAddress, coords.x, coords.y]
-                        : [
-                            tokenAddress,
-                            stealthAddress,
-                            amountU256.low,
-                            amountU256.high,
-                            coords.x,
-                            coords.y
-                        ]
+                    entrypoint: 'send_token',
+                    calldata: [
+                        tokenAddress,
+                        stealthAddress,
+                        amountU256.low.toString(),
+                        amountU256.high.toString(),
+                        coords.x,
+                        coords.y
+                    ]
                 }
             ];
 
@@ -198,7 +210,7 @@ export function Pay() {
                     stealthAddress,
                     ephemeralPubKey,
                     amount: amountWei.toString(),
-                    token: token === 'ETH' ? ETH_ADDRESS : '0x0',
+                    token: tokenAddress,
                     timestamp: new Date().toISOString()
                 });
             } catch (backendErr) {
