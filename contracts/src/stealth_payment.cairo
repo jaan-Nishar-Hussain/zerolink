@@ -47,6 +47,9 @@ pub trait IStealthPayment<TContractState> {
         stealth_address: ContractAddress
     ) -> u256;
     fn get_event_emitter(self: @TContractState) -> ContractAddress;
+    
+    /// Admin functions
+    fn set_event_emitter(ref self: TContractState, new_event_emitter: ContractAddress);
 }
 
 #[starknet::contract]
@@ -229,6 +232,15 @@ pub mod StealthPayment {
 
         fn get_event_emitter(self: @ContractState) -> ContractAddress {
             self.event_emitter.read()
+        }
+
+        fn set_event_emitter(ref self: ContractState, new_event_emitter: ContractAddress) {
+            // Only owner can update
+            let caller = get_caller_address();
+            let owner = self.owner.read();
+            assert(caller == owner, 'Only owner');
+            
+            self.event_emitter.write(new_event_emitter);
         }
     }
 
