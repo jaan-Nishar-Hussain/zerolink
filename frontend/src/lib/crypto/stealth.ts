@@ -511,11 +511,21 @@ export function verifySignature(
 }
 /**
  * Parse a public key hex into X and Y coordinates (as hex strings)
+ * Truncates to fit within Starknet felt252 (251 bits max)
  */
 export function parsePublicKeyToCoordinates(publicKeyHex: string): { x: string, y: string } {
     const point = secp256k1.Point.fromHex(publicKeyHex);
+
+    // Starknet felt252 can hold values up to 2^251 - 1
+    // secp256k1 coordinates are 256-bit, so we need to truncate
+    const FELT_MAX = (BigInt(1) << BigInt(251)) - BigInt(1);
+
+    // Mask to keep only the lower 251 bits
+    const xTruncated = point.x & FELT_MAX;
+    const yTruncated = point.y & FELT_MAX;
+
     return {
-        x: '0x' + point.x.toString(16),
-        y: '0x' + point.y.toString(16)
+        x: '0x' + xTruncated.toString(16),
+        y: '0x' + yTruncated.toString(16)
     };
 }
