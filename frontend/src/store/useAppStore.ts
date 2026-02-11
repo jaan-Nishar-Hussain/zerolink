@@ -4,12 +4,14 @@ import type { MetaAddress } from '../lib/crypto/stealth';
 
 interface Payment {
     id: string;
+    type: 'sent' | 'received';
     amount: string;
     token: string;
     txHash: string;
     ephemeralPubKey: string;
     stealthAddress: string;
     tokenAddress: string;
+    recipient?: string;
     timestamp: number;
     status: 'pending' | 'confirmed' | 'withdrawn';
 }
@@ -67,12 +69,18 @@ export const useAppStore = create<AppState>()(
                 set({ isUnlocked: unlocked }),
 
             addPayment: (payment) =>
-                set((state) => ({
-                    payments: [payment, ...state.payments],
-                    totalReceived: (
-                        parseFloat(state.totalReceived) + parseFloat(payment.amount)
-                    ).toString(),
-                })),
+                set((state) => {
+                    // Prevent duplicate entries
+                    if (state.payments.some(p => p.id === payment.id)) {
+                        return state;
+                    }
+                    return {
+                        payments: [payment, ...state.payments],
+                        totalReceived: payment.type === 'received'
+                            ? (parseFloat(state.totalReceived) + parseFloat(payment.amount)).toString()
+                            : state.totalReceived,
+                    };
+                }),
 
             updatePaymentStatus: (id, status) =>
                 set((state) => ({

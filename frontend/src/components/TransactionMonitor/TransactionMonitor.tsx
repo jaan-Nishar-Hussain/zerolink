@@ -122,6 +122,7 @@ export function TransactionMonitor({
             detected.forEach(payment => {
                 addPayment({
                     id: payment.txHash,
+                    type: 'received',
                     amount: payment.amount,
                     token: getTokenSymbol(payment.token),
                     tokenAddress: payment.token,

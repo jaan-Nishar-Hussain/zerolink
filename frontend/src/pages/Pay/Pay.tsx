@@ -14,6 +14,7 @@ import { useAccount, useConnect, useSendTransaction } from '@starknet-react/core
 import { cairo } from 'starknet';
 import { deriveStealthAddress, parsePublicKeyToCoordinates, type MetaAddress } from '../../lib/crypto';
 import { api } from '../../lib/api';
+import { useAppStore } from '../../store';
 import './Pay.css';
 
 // Fetch meta address from API with localStorage fallback
@@ -202,6 +203,21 @@ export function Pay() {
             const result = await sendAsync(calls);
             setTxHash(result.transaction_hash);
             setStep('success');
+
+            // Save sent transaction to the store
+            useAppStore.getState().addPayment({
+                id: result.transaction_hash,
+                type: 'sent',
+                amount: amount,
+                token: token,
+                txHash: result.transaction_hash,
+                ephemeralPubKey: ephemeralPubKey,
+                stealthAddress: stealthAddress,
+                tokenAddress: tokenAddress,
+                recipient: displayAlias || stealthAddress,
+                timestamp: Date.now(),
+                status: 'confirmed',
+            });
 
             // Notify backend about the payment for faster indexing
             try {
