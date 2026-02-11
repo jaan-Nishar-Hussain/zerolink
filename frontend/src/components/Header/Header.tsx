@@ -5,6 +5,7 @@ import {
     Send,
     Download,
     Settings,
+    History,
     Menu,
     X
 } from 'lucide-react';
@@ -22,7 +23,7 @@ export function Header() {
         { path: '/', label: 'Home', icon: Home },
         { path: '/receive', label: 'Receive', icon: Download },
         { path: '/pay', label: 'Pay', icon: Send },
-        { path: '/dashboard', label: 'Dashboard', icon: Shield },
+        { path: '/transactions', label: 'Transactions', icon: History },
         { path: '/settings', label: 'Settings', icon: Settings },
     ];
 

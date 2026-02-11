@@ -323,8 +323,8 @@ export function Receive() {
                                 {copied ? <Check size={18} /> : <Copy size={18} />}
                                 {copied ? 'Copied!' : 'Copy Link'}
                             </button>
-                            <a href="/dashboard" className="btn btn-secondary">
-                                Go to Dashboard
+                            <a href="/transactions" className="btn btn-secondary">
+                                Go to Transactions
                             </a>
                         </div>
                     </div>
