@@ -338,6 +338,36 @@
     margin-top: 0.5rem;
 }
 
+/* Unlock Form */
+.tx-unlock-form {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+    align-items: center;
+    width: 100%;
+    max-width: 400px;
+}
+
+.tx-password-input {
+    flex: 1;
+    padding: 0.6rem 1rem;
+    border-radius: var(--radius-md, 12px);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+    background: var(--color-surface, rgba(255, 255, 255, 0.04));
+    color: var(--color-text-primary, #fff);
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.tx-password-input::placeholder {
+    color: var(--color-text-muted, #666);
+}
+
+.tx-password-input:focus {
+    border-color: var(--color-accent, #7c3aed);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .transactions-page {

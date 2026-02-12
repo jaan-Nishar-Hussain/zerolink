@@ -1,0 +1,363 @@
+.withdraw-page {
+    padding: 2rem;
+    min-height: calc(100vh - 80px);
+    background: var(--bg-main);
+}
+
+.withdraw-container {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+/* Loading & Locked States */
+.withdraw-loading,
+.withdraw-locked {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 4rem 2rem;
+    text-align: center;
+    border-radius: var(--radius-lg, 16px);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.06));
+}
+
+.withdraw-locked h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.unlock-form {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+    width: 100%;
+    max-width: 420px;
+}
+
+.unlock-input {
+    flex: 1;
+    padding: 0.7rem 1rem;
+    border-radius: var(--radius-lg, 12px);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+    background: var(--color-surface, rgba(255, 255, 255, 0.03));
+    color: var(--color-text-primary, #fff);
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.unlock-input:focus {
+    border-color: var(--color-accent, #7c3aed);
+}
+
+.unlock-input::placeholder {
+    color: var(--color-text-muted, #666);
+}
+
+.password-error {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: #ef4444;
+    font-size: 0.85rem;
+}
+
+/* Stats */
+.withdraw-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.withdraw-stat {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    border-radius: var(--radius-lg, 16px);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+}
+
+.stat-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    flex-shrink: 0;
+}
+
+.stat-icon.received-icon {
+    background: rgba(16, 185, 129, 0.12);
+    color: #10b981;
+}
+
+.stat-icon.strk-icon {
+    background: rgba(124, 58, 237, 0.12);
+    color: #7c3aed;
+}
+
+.stat-icon.eth-icon {
+    background: rgba(59, 130, 246, 0.12);
+    color: #3b82f6;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.stat-label {
+    font-size: 0.8rem;
+    color: var(--color-text-muted, #888);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Error */
+.withdraw-error {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    border-radius: var(--radius-lg, 16px);
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+    font-size: 0.9rem;
+}
+
+/* Scanning */
+.withdraw-scanning {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    border-radius: var(--radius-lg, 16px);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.06));
+}
+
+/* Withdraw All Bar */
+.withdraw-all-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    border-radius: var(--radius-lg, 16px);
+    border: 1px solid rgba(124, 58, 237, 0.2);
+    background: rgba(124, 58, 237, 0.04);
+}
+
+.withdraw-all-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+}
+
+/* Payment List */
+.withdraw-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.withdraw-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    border-radius: var(--radius-lg, 16px);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.06));
+    border-left: 3px solid #10b981;
+    transition: all 0.2s ease;
+}
+
+.withdraw-row:hover {
+    border-color: rgba(124, 58, 237, 0.25);
+    transform: translateY(-1px);
+}
+
+.withdraw-row.success {
+    border-left-color: #7c3aed;
+    opacity: 0.7;
+}
+
+.withdraw-row.failed {
+    border-left-color: #ef4444;
+}
+
+.withdraw-row.withdrawing {
+    border-left-color: #f59e0b;
+}
+
+/* Status Icon */
+.withdraw-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: rgba(16, 185, 129, 0.1);
+    flex-shrink: 0;
+}
+
+.icon-success {
+    color: #10b981;
+}
+
+.icon-error {
+    color: #ef4444;
+}
+
+/* Info */
+.withdraw-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.withdraw-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 0.35rem;
+}
+
+.withdraw-balances {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.balance-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.6rem;
+    border-radius: var(--radius-full, 999px);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.balance-tag.strk {
+    background: rgba(124, 58, 237, 0.12);
+    color: #7c3aed;
+}
+
+.balance-tag.eth {
+    background: rgba(59, 130, 246, 0.12);
+    color: #3b82f6;
+}
+
+.balance-tag.empty {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--color-text-muted, #666);
+}
+
+.withdraw-error-msg {
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+    color: #ef4444;
+}
+
+.withdraw-success-msg {
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+}
+
+.withdraw-success-msg a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+/* Actions */
+.withdraw-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.withdraw-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.3rem 0.75rem;
+    border-radius: var(--radius-full, 999px);
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.withdraw-badge.success {
+    background: rgba(124, 58, 237, 0.12);
+    color: #7c3aed;
+}
+
+.withdraw-badge.pending {
+    background: rgba(245, 158, 11, 0.12);
+    color: #f59e0b;
+}
+
+/* Empty State */
+.withdraw-empty {
+    padding: 4rem 2rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    border-radius: var(--radius-lg, 16px);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.06));
+}
+
+.withdraw-empty h3 {
+    font-size: 1.3rem;
+    font-weight: 600;
+}
+
+/* Destination Info */
+.withdraw-destination {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    border-radius: var(--radius-lg, 16px);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.06));
+    font-size: 0.85rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .withdraw-page {
+        padding: 1rem;
+    }
+
+    .withdraw-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .withdraw-row {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .withdraw-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .withdraw-all-bar {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+}

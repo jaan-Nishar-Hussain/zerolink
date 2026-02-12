@@ -213,3 +213,21 @@
     margin-bottom: var(--space-xl);
     color: var(--color-text-secondary);
 }
+
+/* Backup Actions */
+.backup-actions {
+    display: flex;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.import-error {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    color: var(--color-error);
+    font-size: var(--text-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--color-error-bg);
+    border-radius: var(--radius-md);
+}

@@ -58,8 +58,17 @@ export function useSendStealthPayment() {
             let calls;
 
             if (params.token) {
-                // ERC20 token payment
+                // ERC20 token payment — approve + send_token
                 calls = [
+                    {
+                        contractAddress: params.token,
+                        entrypoint: 'approve',
+                        calldata: [
+                            CONTRACTS.STEALTH_PAYMENT,
+                            params.amount,
+                            '0', // amount high (for u256)
+                        ],
+                    },
                     {
                         contractAddress: CONTRACTS.STEALTH_PAYMENT,
                         entrypoint: 'send_token',
@@ -74,13 +83,25 @@ export function useSendStealthPayment() {
                     },
                 ];
             } else {
-                // ETH payment
+                // ETH payment — approve + send_eth
+                const ETH_TOKEN = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7';
                 calls = [
+                    {
+                        contractAddress: ETH_TOKEN,
+                        entrypoint: 'approve',
+                        calldata: [
+                            CONTRACTS.STEALTH_PAYMENT,
+                            params.amount,
+                            '0', // amount high (for u256)
+                        ],
+                    },
                     {
                         contractAddress: CONTRACTS.STEALTH_PAYMENT,
                         entrypoint: 'send_eth',
                         calldata: [
                             stealth.address,
+                            params.amount,
+                            '0', // amount high (for u256)
                             ephemeralX,
                             ephemeralY,
                         ],

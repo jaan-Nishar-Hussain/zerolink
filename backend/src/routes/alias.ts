@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../db';
 import { z } from 'zod';
+import { requireOwnership } from '../middleware/auth';
 
 const router = Router();
 
@@ -18,6 +19,7 @@ const registerAliasSchema = z.object({
     spendPubKey: hexKeySchema,
     viewingPubKey: hexKeySchema,
     displayName: z.string().max(50).optional(),
+    signerAddress: z.string().optional(),
 });
 
 const updateAliasSchema = z.object({
@@ -27,6 +29,7 @@ const updateAliasSchema = z.object({
 
 interface AliasParams {
     alias: string;
+    [key: string]: string;
 }
 
 /**
@@ -86,7 +89,7 @@ router.post('/', async (req, res) => {
             return;
         }
 
-        const { alias, spendPubKey, viewingPubKey, displayName } = parseResult.data;
+        const { alias, spendPubKey, viewingPubKey, displayName, signerAddress } = parseResult.data;
         const aliasLower = alias.toLowerCase();
 
         // Check if alias already exists
@@ -106,6 +109,7 @@ router.post('/', async (req, res) => {
                 spendPubKey,
                 viewingPubKey,
                 displayName: displayName || null,
+                signerAddress: signerAddress || null,
             },
         });
 
@@ -123,14 +127,28 @@ router.post('/', async (req, res) => {
 /**
  * PUT /api/alias/:alias
  * Update alias metadata (displayName, avatar)
- * Requires signature verification in production
+ * Requires ownership verification — signerAddress must match registered owner
  */
-router.put<AliasParams>('/:alias', async (req, res) => {
+router.put<AliasParams>('/:alias', requireOwnership, async (req, res) => {
     try {
         const alias = req.params.alias;
-        const { displayName, avatarUrl } = req.body;
+        const { displayName, avatarUrl, signerAddress } = req.body;
 
-        // In production, verify signature here
+        // Verify ownership: signer must match registered address
+        const existing = await prisma.alias.findUnique({
+            where: { alias: alias.toLowerCase() },
+            select: { signerAddress: true },
+        });
+
+        if (!existing) {
+            res.status(404).json({ error: 'Alias not found' });
+            return;
+        }
+
+        if (existing.signerAddress && existing.signerAddress !== signerAddress) {
+            res.status(403).json({ error: 'Unauthorized — signer does not own this alias' });
+            return;
+        }
 
         const updated = await prisma.alias.update({
             where: { alias: alias.toLowerCase() },

@@ -216,3 +216,63 @@ export async function clearKeys(): Promise<void> {
 export function isSessionValid(): boolean {
     return !!sessionStorage.getItem('zerolink-session');
 }
+
+/**
+ * Export encrypted key backup as a downloadable JSON blob.
+ * The exported data is still encrypted — the user needs their password to restore.
+ */
+export async function exportEncryptedBackup(): Promise<{ blob: Blob; filename: string } | null> {
+    const database = await getDB();
+    const stored = await database.get(STORE_NAME, 'primary-keys') as EncryptedKeyStore | undefined;
+
+    if (!stored) return null;
+
+    const backup = {
+        version: 1,
+        app: 'zerolink',
+        alias: stored.alias,
+        encryptedData: stored.encryptedData,
+        createdAt: stored.createdAt,
+        exportedAt: Date.now(),
+    };
+
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const filename = `zerolink-backup-${stored.alias}-${new Date().toISOString().slice(0, 10)}.json`;
+
+    return { blob, filename };
+}
+
+/**
+ * Import an encrypted key backup from a JSON file.
+ * Returns the alias on success, or throws on failure.
+ */
+export async function importEncryptedBackup(file: File): Promise<string> {
+    const text = await file.text();
+    let backup: {
+        version: number;
+        app: string;
+        alias: string;
+        encryptedData: string;
+        createdAt: number;
+    };
+
+    try {
+        backup = JSON.parse(text);
+    } catch {
+        throw new Error('Invalid backup file format');
+    }
+
+    if (backup.app !== 'zerolink' || !backup.encryptedData || !backup.alias) {
+        throw new Error('Not a valid ZeroLink backup file');
+    }
+
+    const database = await getDB();
+    await database.put(STORE_NAME, {
+        id: 'primary-keys',
+        encryptedData: backup.encryptedData,
+        alias: backup.alias,
+        createdAt: backup.createdAt || Date.now(),
+    });
+
+    return backup.alias;
+}

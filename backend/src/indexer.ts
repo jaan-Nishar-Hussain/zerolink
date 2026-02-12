@@ -11,13 +11,14 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Configuration
-const STARKNET_RPC = process.env.STARKNET_RPC_URL || 'https://free-rpc.nethermind.io/sepolia-juno';
+const STARKNET_RPC = process.env.STARKNET_RPC_URL || 'https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_10/XN9-BdSkx8Pw_0vERYc_f';
 const EVENT_EMITTER_CONTRACT = process.env.EVENT_EMITTER_CONTRACT || '0x0';
 const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '10000');
 const BATCH_SIZE = parseInt(process.env.BATCH_SIZE || '100');
 
 // Event signature for StealthPaymentAnnouncement
-const STEALTH_ANNOUNCEMENT_KEY = '0x00';  // Replace with actual event key after deployment
+// sn_keccak("StealthPaymentAnnouncement") — computed via starknet.js hash.getSelectorFromName
+const STEALTH_ANNOUNCEMENT_KEY = '0x370d4e719a5c006828be1792db85df647b592056f6d394cc14784ef00526003';
 
 interface StarknetEvent {
     block_number: number;

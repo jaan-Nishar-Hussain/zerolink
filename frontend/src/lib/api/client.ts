@@ -137,12 +137,9 @@ class ApiClient {
         timestamp: string;
         blockNumber?: string;
     }): Promise<{ message: string; id: string }> {
-        return this.request('/announcements', {
+        return this.request('/announcements/announce', {
             method: 'POST',
-            body: JSON.stringify({
-                ...announcement,
-                blockNumber: announcement.blockNumber || '0', // Default to 0 for pending
-            }),
+            body: JSON.stringify(announcement),
         });
     }
 

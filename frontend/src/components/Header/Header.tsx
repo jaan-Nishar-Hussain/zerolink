@@ -24,6 +24,7 @@ export function Header() {
         { path: '/receive', label: 'Receive', icon: Download },
         { path: '/pay', label: 'Pay', icon: Send },
         { path: '/transactions', label: 'Transactions', icon: History },
+        { path: '/withdraw', label: 'Withdraw', icon: Download },
         { path: '/settings', label: 'Settings', icon: Settings },
     ];
 

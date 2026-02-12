@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../db';
 import type { StealthAnnouncement } from '@prisma/client';
+import { requireApiKey } from '../middleware/auth';
 
 const router = Router();
 
@@ -118,9 +119,9 @@ router.get('/stats', async (req, res) => {
 /**
  * POST /api/announcements
  * Internal endpoint for indexer to store new announcements
- * In production, this should be protected
+ * Protected with API key authentication
  */
-router.post('/', async (req, res) => {
+router.post('/', requireApiKey, async (req, res) => {
     try {
         const {
             txHash,
@@ -175,6 +176,64 @@ router.post('/', async (req, res) => {
                 id: 'main',
                 lastBlockNumber: BigInt(blockNumber),
                 lastTxHash: txHash,
+            },
+        });
+
+        res.status(201).json({
+            message: 'Announcement stored',
+            id: announcement.id,
+        });
+    } catch (error) {
+        console.error('Error storing announcement:', error);
+        res.status(500).json({ error: 'Failed to store announcement' });
+    }
+});
+
+/**
+ * POST /api/announcements/announce
+ * Public endpoint for frontend clients to announce stealth payments
+ * No API key required - announcements are public data
+ */
+router.post('/announce', async (req, res) => {
+    try {
+        const {
+            txHash,
+            stealthAddress,
+            ephemeralPubKey,
+            token,
+            amount,
+            timestamp
+        } = req.body;
+
+        // Validate required fields
+        if (!txHash || !stealthAddress || !ephemeralPubKey || !token || !amount) {
+            res.status(400).json({ error: 'Missing required fields' });
+            return;
+        }
+
+        // Check for duplicate
+        const existing = await prisma.stealthAnnouncement.findUnique({
+            where: { txHash },
+        });
+
+        if (existing) {
+            res.status(200).json({
+                message: 'Announcement already exists',
+                id: existing.id,
+            });
+            return;
+        }
+
+        // Create announcement
+        const announcement = await prisma.stealthAnnouncement.create({
+            data: {
+                txHash,
+                stealthAddress,
+                ephemeralPubKey,
+                token,
+                amount: amount.toString(),
+                blockNumber: BigInt(0), // Will be updated by indexer
+                timestamp: timestamp ? new Date(timestamp) : new Date(),
             },
         });
 

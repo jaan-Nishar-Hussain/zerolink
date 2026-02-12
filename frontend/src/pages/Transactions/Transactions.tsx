@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     History,
     ArrowUpRight,
@@ -9,11 +9,14 @@ import {
     Search,
     Filter,
     RefreshCw,
-    Loader2
+    Loader2,
+    Lock
 } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { api } from '../../lib/api';
 import type { StealthAnnouncement } from '../../lib/api/client';
+import { checkStealthPayment, hexToBytes } from '../../lib/crypto/stealth';
+import { loadKeys } from '../../lib/crypto/storage';
 import './Transactions.css';
 
 type FilterType = 'all' | 'sent' | 'received';
@@ -55,34 +58,100 @@ export function Transactions() {
     const [backendTxs, setBackendTxs] = useState<DisplayTransaction[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const { payments, walletAddress } = useAppStore();
+    const [keysAvailable, setKeysAvailable] = useState(true);
+    const [passwordPrompt, setPasswordPrompt] = useState(false);
+    const [password, setPassword] = useState('');
+    const passwordRef = useRef('');
+    const { payments, walletAddress, isUnlocked } = useAppStore();
 
-    // Fetch announcements from backend
-    const fetchTransactions = useCallback(async () => {
+    // Fetch announcements from backend and detect received payments
+    const fetchTransactions = useCallback(async (pwd?: string) => {
         setLoading(true);
         setError('');
         try {
-            const result = await api.getAnnouncements(undefined, 200);
-            const txs: DisplayTransaction[] = result.announcements.map((a: StealthAnnouncement) => {
-                // Check if this tx is in the store (means we sent it)
+            // Try to load user's stealth keys for detection
+            let stealthKeys = null;
+            const unlockPassword = pwd || passwordRef.current;
+            if (unlockPassword) {
+                try {
+                    stealthKeys = await loadKeys(unlockPassword);
+                    if (stealthKeys) {
+                        setKeysAvailable(true);
+                        setPasswordPrompt(false);
+                        passwordRef.current = unlockPassword;
+                        console.log('[Transactions] Stealth keys loaded successfully');
+                    } else {
+                        console.warn('[Transactions] loadKeys returned null - wrong password?');
+                    }
+                } catch (e) {
+                    console.warn('[Transactions] Could not load stealth keys:', e);
+                }
+            }
+
+            const result = await api.scanAnnouncements(undefined, 500);
+            console.log(`[Transactions] Scan returned ${result.announcements.length} announcements`);
+            const txs: DisplayTransaction[] = [];
+
+            for (const a of result.announcements) {
+                // Check if this tx is in the local store (means we sent it)
                 const storePayment = payments.find(p => p.txHash === a.txHash);
 
-                return {
-                    id: a.id || a.txHash,
-                    type: storePayment?.type || 'sent' as const,
-                    amount: formatAmount(a.amount, a.token),
-                    token: getTokenSymbol(a.token),
-                    txHash: a.txHash,
-                    stealthAddress: a.stealthAddress,
-                    recipient: storePayment?.recipient,
-                    timestamp: new Date(a.timestamp).getTime(),
-                    status: 'confirmed',
-                };
-            });
+                if (storePayment) {
+                    // We sent this transaction
+                    txs.push({
+                        id: a.id || a.txHash,
+                        type: 'sent',
+                        amount: formatAmount(a.amount, a.token),
+                        token: getTokenSymbol(a.token),
+                        txHash: a.txHash,
+                        stealthAddress: a.stealthAddress,
+                        recipient: storePayment.recipient,
+                        timestamp: new Date(a.timestamp).getTime(),
+                        status: 'confirmed',
+                    });
+                    continue;
+                }
+
+                // If we have stealth keys, check if this payment is for us
+                if (stealthKeys && a.ephemeralPubKey) {
+                    try {
+                        const detected = checkStealthPayment(
+                            stealthKeys.viewingKeyPair.privateKey,
+                            stealthKeys.spendKeyPair.privateKey,
+                            stealthKeys.spendKeyPair.publicKey,
+                            a.ephemeralPubKey,
+                            a.stealthAddress
+                        );
+
+                        if (detected) {
+                            console.log(`[Transactions] Detected received payment: ${a.txHash}`);
+                            txs.push({
+                                id: a.id || a.txHash,
+                                type: 'received',
+                                amount: formatAmount(a.amount, a.token),
+                                token: getTokenSymbol(a.token),
+                                txHash: a.txHash,
+                                stealthAddress: a.stealthAddress,
+                                timestamp: new Date(a.timestamp).getTime(),
+                                status: 'confirmed',
+                            });
+                        }
+                    } catch (e) {
+                        console.warn('[Transactions] Error checking stealth payment:', e);
+                    }
+                }
+            }
+
+            console.log(`[Transactions] Final result: ${txs.length} relevant txs (${txs.filter(t => t.type === 'sent').length} sent, ${txs.filter(t => t.type === 'received').length} received)`);
+
+            // If no stealth keys and no store payments, prompt for password
+            if (!stealthKeys && txs.length === 0) {
+                setKeysAvailable(false);
+            }
 
             setBackendTxs(txs);
         } catch (err: any) {
-            console.error('Failed to fetch transactions:', err);
+            console.error('[Transactions] Failed to fetch transactions:', err);
             setError('Could not load transactions from server');
         } finally {
             setLoading(false);
@@ -92,6 +161,41 @@ export function Transactions() {
     useEffect(() => {
         fetchTransactions();
     }, [fetchTransactions]);
+
+    // Re-announce store-only payments that may have failed to POST to the backend
+    useEffect(() => {
+        if (payments.length === 0) return;
+
+        const reAnnounce = async () => {
+            try {
+                const result = await api.scanAnnouncements(undefined, 500);
+                const backendHashes = new Set(result.announcements.map((a: any) => a.txHash));
+
+                for (const p of payments) {
+                    if (p.type === 'sent' && !backendHashes.has(p.txHash) && p.ephemeralPubKey && p.stealthAddress) {
+                        console.log(`[Transactions] Re-announcing missing payment: ${p.txHash}`);
+                        try {
+                            await api.announcePayment({
+                                txHash: p.txHash,
+                                stealthAddress: p.stealthAddress,
+                                ephemeralPubKey: p.ephemeralPubKey,
+                                amount: (BigInt(Math.floor(parseFloat(p.amount) * 1e18))).toString(),
+                                token: p.tokenAddress || p.token,
+                                timestamp: new Date(p.timestamp).toISOString(),
+                            });
+                            console.log(`[Transactions] Re-announced successfully: ${p.txHash}`);
+                        } catch (e) {
+                            console.warn(`[Transactions] Failed to re-announce ${p.txHash}:`, e);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('[Transactions] Re-announce check failed:', e);
+            }
+        };
+
+        reAnnounce();
+    }, [payments]);
 
     // Merge: backend txs + any store-only txs (not yet in backend)
     const allTransactions = (() => {
@@ -186,7 +290,7 @@ export function Transactions() {
                     </div>
                     <button
                         className="btn btn-ghost"
-                        onClick={fetchTransactions}
+                        onClick={() => fetchTransactions()}
                         disabled={loading}
                         title="Refresh"
                     >
@@ -271,7 +375,7 @@ export function Transactions() {
                 {error && (
                     <div className="tx-error">
                         <p>{error}</p>
-                        <button className="btn btn-secondary btn-sm" onClick={fetchTransactions}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => fetchTransactions()}>
                             Retry
                         </button>
                     </div>
@@ -284,19 +388,52 @@ export function Transactions() {
                             <div className="tx-empty glass">
                                 {allTransactions.length === 0 ? (
                                     <>
-                                        <Shield size={48} className="text-muted" />
-                                        <h3>No transactions yet</h3>
-                                        <p className="text-secondary">
-                                            Send or receive a private payment to see it here.
-                                        </p>
-                                        <div className="tx-empty-actions">
-                                            <a href="/pay" className="btn btn-primary">
-                                                <ArrowUpRight size={16} /> Send Payment
-                                            </a>
-                                            <a href="/receive" className="btn btn-secondary">
-                                                <ArrowDownLeft size={16} /> Receive
-                                            </a>
-                                        </div>
+                                        {!keysAvailable ? (
+                                            <>
+                                                <Lock size={48} className="text-muted" />
+                                                <h3>Unlock to see received payments</h3>
+                                                <p className="text-secondary">
+                                                    Enter your password to scan for payments sent to you.
+                                                </p>
+                                                <div className="tx-unlock-form">
+                                                    <input
+                                                        type="password"
+                                                        placeholder="Enter password"
+                                                        value={password}
+                                                        onChange={(e) => setPassword(e.target.value)}
+                                                        className="tx-password-input"
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter' && password) {
+                                                                fetchTransactions(password);
+                                                            }
+                                                        }}
+                                                    />
+                                                    <button
+                                                        className="btn btn-primary"
+                                                        onClick={() => fetchTransactions(password)}
+                                                        disabled={!password || loading}
+                                                    >
+                                                        {loading ? <Loader2 size={16} className="icon-spin" /> : 'Unlock & Scan'}
+                                                    </button>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Shield size={48} className="text-muted" />
+                                                <h3>No transactions yet</h3>
+                                                <p className="text-secondary">
+                                                    Send or receive a private payment to see it here.
+                                                </p>
+                                                <div className="tx-empty-actions">
+                                                    <a href="/pay" className="btn btn-primary">
+                                                        <ArrowUpRight size={16} /> Send Payment
+                                                    </a>
+                                                    <a href="/receive" className="btn btn-secondary">
+                                                        <ArrowDownLeft size={16} /> Receive
+                                                    </a>
+                                                </div>
+                                            </>
+                                        )}
                                     </>
                                 ) : (
                                     <>
@@ -329,11 +466,11 @@ export function Transactions() {
                                     <div className="tx-main-info">
                                         <div className="tx-title">
                                             {payment.type === 'sent' ? (
-                                                <>Sent <span className="tx-highlight">{payment.token}</span>{payment.recipient ? <> to <span className="tx-highlight">@{payment.recipient}</span></> : ''}</>
+                                                <>Sent <span className="tx-highlight">{payment.amount} {payment.token}</span> to <span className="tx-highlight mono">{payment.recipient ? `@${payment.recipient}` : truncateHash(payment.stealthAddress)}</span></>
                                             ) : payment.type === 'received' ? (
-                                                <>Received <span className="tx-highlight">stealth payment</span></>
+                                                <>Received <span className="tx-highlight">{payment.amount} {payment.token}</span> via <span className="tx-highlight mono">{truncateHash(payment.stealthAddress)}</span></>
                                             ) : (
-                                                <>Stealth Payment <span className="tx-highlight">{payment.token}</span></>
+                                                <>Stealth Payment to <span className="tx-highlight mono">{truncateHash(payment.stealthAddress)}</span></>
                                             )}
                                         </div>
                                         <div className="tx-subtitle text-muted">

@@ -1,23 +1,29 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
     Key,
     Download,
+    Upload,
     Trash2,
     AlertCircle,
     Check,
     Shield,
     Eye,
     EyeOff,
-    Copy
+    Copy,
+    Loader2
 } from 'lucide-react';
 import { useAppStore } from '../../store';
-import { clearKeys } from '../../lib/crypto/storage';
+import { clearKeys, exportEncryptedBackup, importEncryptedBackup } from '../../lib/crypto/storage';
 import './Settings.css';
 
 export function Settings() {
     const [showKeys, setShowKeys] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [copied, setCopied] = useState<string | null>(null);
+    const [exportStatus, setExportStatus] = useState<'idle' | 'exporting' | 'done' | 'error'>('idle');
+    const [importStatus, setImportStatus] = useState<'idle' | 'importing' | 'done' | 'error'>('idle');
+    const [importError, setImportError] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const { alias, metaAddress, isUnlocked, reset } = useAppStore();
 
@@ -31,6 +37,48 @@ export function Settings() {
         await clearKeys();
         reset();
         window.location.href = '/';
+    };
+
+    const handleExport = async () => {
+        setExportStatus('exporting');
+        try {
+            const result = await exportEncryptedBackup();
+            if (!result) {
+                setExportStatus('error');
+                return;
+            }
+            const url = URL.createObjectURL(result.blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = result.filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            setExportStatus('done');
+            setTimeout(() => setExportStatus('idle'), 3000);
+        } catch {
+            setExportStatus('error');
+        }
+    };
+
+    const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setImportStatus('importing');
+        setImportError(null);
+        try {
+            const importedAlias = await importEncryptedBackup(file);
+            setImportStatus('done');
+            setTimeout(() => {
+                window.location.href = '/receive';
+            }, 1500);
+        } catch (err) {
+            setImportError(err instanceof Error ? err.message : 'Import failed');
+            setImportStatus('error');
+        }
+        // Reset file input
+        if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
     if (!isUnlocked) {
@@ -145,27 +193,64 @@ export function Settings() {
                     )}
                 </div>
 
-                {/* Backup */}
+                {/* Backup & Import */}
                 <div className="settings-section glass animate-slide-up" style={{ animationDelay: '0.2s' }}>
                     <div className="section-header">
                         <div className="section-icon">
                             <Download size={20} />
                         </div>
                         <div>
-                            <h3>Backup Keys</h3>
-                            <p className="text-muted">Export encrypted backup of your keys</p>
+                            <h3>Backup & Import Keys</h3>
+                            <p className="text-muted">Export or restore your encrypted key backup</p>
                         </div>
                     </div>
 
                     <div className="section-content">
                         <p className="text-secondary">
-                            Your backup will be encrypted with your password. Store it securely -
-                            you'll need both the backup file and your password to recover your account.
+                            Your backup is encrypted with your password. Store it securely —
+                            you'll need both the backup file and your password to recover.
                         </p>
-                        <button className="btn btn-secondary">
-                            <Download size={18} />
-                            Export Encrypted Backup
-                        </button>
+                        <div className="backup-actions">
+                            <button
+                                className="btn btn-secondary"
+                                onClick={handleExport}
+                                disabled={exportStatus === 'exporting'}
+                            >
+                                {exportStatus === 'exporting' ? (
+                                    <><Loader2 size={18} className="icon-spin" /> Exporting...</>
+                                ) : exportStatus === 'done' ? (
+                                    <><Check size={18} /> Exported!</>
+                                ) : (
+                                    <><Download size={18} /> Export Encrypted Backup</>
+                                )}
+                            </button>
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={importStatus === 'importing'}
+                            >
+                                {importStatus === 'importing' ? (
+                                    <><Loader2 size={18} className="icon-spin" /> Importing...</>
+                                ) : importStatus === 'done' ? (
+                                    <><Check size={18} /> Imported! Redirecting...</>
+                                ) : (
+                                    <><Upload size={18} /> Import Backup</>
+                                )}
+                            </button>
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept=".json"
+                                style={{ display: 'none' }}
+                                onChange={handleImport}
+                            />
+                        </div>
+                        {importError && (
+                            <div className="import-error">
+                                <AlertCircle size={14} />
+                                {importError}
+                            </div>
+                        )}
                     </div>
                 </div>
 

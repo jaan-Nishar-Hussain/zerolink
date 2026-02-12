@@ -22,7 +22,7 @@ const connectors = [
 // Fall back to public endpoints with correct spec version handling
 function rpc(chain: typeof sepolia | typeof mainnet) {
     const rpcUrl = chain.id === sepolia.id
-        ? import.meta.env.VITE_STARKNET_RPC || 'https://starknet-sepolia.public.blastapi.io/rpc/v0_7'
+        ? import.meta.env.VITE_STARKNET_RPC || 'https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_10/XN9-BdSkx8Pw_0vERYc_f'
         : 'https://starknet-mainnet.public.blastapi.io/rpc/v0_7';
 
     return {

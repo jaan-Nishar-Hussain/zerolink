@@ -21,6 +21,7 @@ model Alias {
   // Optional metadata
   displayName     String?
   avatarUrl       String?
+  signerAddress   String?  // Starknet address of the owner (for update auth)
   
   // Index for fast lookups
   @@index([alias])

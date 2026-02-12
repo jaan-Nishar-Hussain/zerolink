@@ -11,6 +11,7 @@ pub trait IStealthPayment<TContractState> {
     fn send_eth(
         ref self: TContractState,
         stealth_address: ContractAddress,
+        amount: u256,
         ephemeral_pub_key_x: felt252,
         ephemeral_pub_key_y: felt252,
     );
@@ -113,11 +114,19 @@ pub mod StealthPayment {
         fn send_eth(
             ref self: ContractState,
             stealth_address: ContractAddress,
+            amount: u256,
             ephemeral_pub_key_x: felt252,
             ephemeral_pub_key_y: felt252,
         ) {
-            let amount: u256 = 1; // Placeholder - would come from transaction value
-            
+            // ETH is an ERC20 on Starknet
+            let eth_token: ContractAddress = 0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7.try_into().unwrap();
+            let caller = get_caller_address();
+            let this = get_contract_address();
+
+            // Transfer ETH from caller to this contract
+            let token_dispatcher = IERC20Dispatcher { contract_address: eth_token };
+            token_dispatcher.transfer_from(caller, this, amount);
+
             let current = self.eth_balances.read(stealth_address);
             self.eth_balances.write(stealth_address, current + amount);
 
@@ -184,6 +193,11 @@ pub mod StealthPayment {
             assert(balance >= amount, 'Insufficient balance');
             
             self.eth_balances.write(caller, balance - amount);
+
+            // Transfer ETH from contract to destination
+            let eth_token: ContractAddress = 0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7.try_into().unwrap();
+            let token_dispatcher = IERC20Dispatcher { contract_address: eth_token };
+            token_dispatcher.transfer(to, amount);
 
             let zero_address: ContractAddress = starknet::contract_address_const::<0>();
             self.emit(Withdrawal {
