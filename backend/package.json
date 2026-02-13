@@ -20,6 +20,8 @@
   "type": "commonjs",
   "dependencies": {
     "@libsql/client": "^0.17.0",
+    "@noble/curves": "^2.0.1",
+    "@noble/hashes": "^2.0.1",
     "@prisma/adapter-libsql": "^7.3.0",
     "@prisma/adapter-pg": "^7.3.0",
     "@prisma/client": "^7.3.0",
@@ -29,6 +31,7 @@
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
     "pg": "^8.18.0",
+    "starknet": "^9.2.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
