@@ -2,8 +2,24 @@ import { Router } from 'express';
 import { prisma } from '../db';
 import type { StealthAnnouncement } from '@prisma/client';
 import { requireApiKey } from '../middleware/auth';
+import { RpcProvider } from 'starknet';
+import rateLimit from 'express-rate-limit';
 
 const router = Router();
+
+// RPC provider for on-chain verification
+const provider = new RpcProvider({
+    nodeUrl: process.env.STARKNET_RPC_URL || 'https://free-rpc.nethermind.io/sepolia-juno',
+});
+
+// Rate limiter for the public /announce endpoint
+const announceLimiter = rateLimit({
+    windowMs: 60 * 1000,  // 1 minute window
+    max: 10,              // 10 requests per minute per IP
+    message: { error: 'Too many announcements, slow down' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
 
 /**
  * GET /api/announcements
@@ -194,7 +210,7 @@ router.post('/', requireApiKey, async (req, res) => {
  * Public endpoint for frontend clients to announce stealth payments
  * No API key required - announcements are public data
  */
-router.post('/announce', async (req, res) => {
+router.post('/announce', announceLimiter, async (req, res) => {
     try {
         const {
             txHash,
@@ -221,6 +237,18 @@ router.post('/announce', async (req, res) => {
                 message: 'Announcement already exists',
                 id: existing.id,
             });
+            return;
+        }
+
+        // Verify the transaction exists on-chain before storing
+        try {
+            const receipt = await provider.getTransactionReceipt(txHash);
+            if (!receipt || !receipt.isSuccess()) {
+                res.status(400).json({ error: 'Transaction not confirmed on-chain' });
+                return;
+            }
+        } catch {
+            res.status(400).json({ error: 'Transaction not found on-chain' });
             return;
         }
 

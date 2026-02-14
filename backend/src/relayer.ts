@@ -33,7 +33,7 @@ function ensureInitialised(): void {
 
     const rpcUrl =
         process.env.STARKNET_RPC_URL ||
-        'https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_8/XN9-BdSkx8Pw_0vERYc_f';
+        'https://free-rpc.nethermind.io/sepolia-juno';
 
     _provider = new RpcProvider({ nodeUrl: rpcUrl });
     _relayerKey = process.env.RELAYER_PRIVATE_KEY || '';

@@ -102,7 +102,7 @@ fn test_withdraw_eth_reverts_on_insufficient_balance() {
 }
 
 #[test]
-#[should_panic(expected: ('Invalid public key',))]
+#[should_panic(expected: ('No payment to this address',))]
 fn test_withdraw_eth_with_proof_reverts_zero_pubkey() {
     let (payment, _) = deploy_contracts();
 
@@ -111,12 +111,12 @@ fn test_withdraw_eth_with_proof_reverts_zero_pubkey() {
         STEALTH(),
         RECIPIENT(),
         100,
-        0, // invalid pub key
+        0, // no stored key → panics with 'No payment to this address'
     );
 }
 
 #[test]
-#[should_panic(expected: ('Insufficient balance',))]
+#[should_panic(expected: ('No payment to this address',))]
 fn test_withdraw_eth_with_proof_reverts_insufficient() {
     let (payment, _) = deploy_contracts();
 
@@ -125,7 +125,7 @@ fn test_withdraw_eth_with_proof_reverts_insufficient() {
         STEALTH(),
         RECIPIENT(),
         100,
-        0x1234, // valid non-zero pub key
+        0x1234, // no deposit was made → panics with 'No payment to this address'
     );
 }
 

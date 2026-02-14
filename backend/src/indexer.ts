@@ -14,7 +14,7 @@ import path from 'path';
 dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
 
 // Configuration
-const STARKNET_RPC = process.env.STARKNET_RPC_URL || 'https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_8/XN9-BdSkx8Pw_0vERYc_f';
+const STARKNET_RPC = process.env.STARKNET_RPC_URL || 'https://free-rpc.nethermind.io/sepolia-juno';
 const EVENT_EMITTER_CONTRACT = process.env.EVENT_EMITTER_CONTRACT || '0x0';
 const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '10000');
 const BATCH_SIZE = parseInt(process.env.BATCH_SIZE || '100');

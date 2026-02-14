@@ -17,7 +17,7 @@ export const NETWORK = import.meta.env.VITE_STARKNET_NETWORK || 'sepolia';
 
 // RPC URL
 export const RPC_URL = import.meta.env.VITE_STARKNET_RPC_URL ||
-    'https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_8/XN9-BdSkx8Pw_0vERYc_f';
+    'https://free-rpc.nethermind.io/sepolia-juno';
 
 // Contract ABIs (minimal interfaces for frontend interaction)
 export const STEALTH_PAYMENT_ABI = [
