@@ -148,6 +148,22 @@ class ApiClient {
     async healthCheck(): Promise<{ status: string; timestamp: string }> {
         return this.request('/health'.replace('/api', ''));
     }
+
+    // Relay
+
+    async submitRelay(params: {
+        nullifierHash: string;
+        commitment: string;
+        recipient: string;
+        amount: string;
+        token: string;
+        secret: string;
+    }): Promise<{ transactionHash: string; status: string }> {
+        return this.request('/relay', {
+            method: 'POST',
+            body: JSON.stringify(params),
+        });
+    }
 }
 
 export const api = new ApiClient();

@@ -6,19 +6,22 @@
  */
 
 import { prisma } from './db';
+import { broadcast } from './routes/notifications';
 import dotenv from 'dotenv';
+import path from 'path';
 
-dotenv.config();
+// Load .env explicitly from the backend directory so it works regardless of cwd
+dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
 
 // Configuration
-const STARKNET_RPC = process.env.STARKNET_RPC_URL || 'https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_10/XN9-BdSkx8Pw_0vERYc_f';
+const STARKNET_RPC = process.env.STARKNET_RPC_URL || 'https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_8/XN9-BdSkx8Pw_0vERYc_f';
 const EVENT_EMITTER_CONTRACT = process.env.EVENT_EMITTER_CONTRACT || '0x0';
 const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '10000');
 const BATCH_SIZE = parseInt(process.env.BATCH_SIZE || '100');
 
 // Event signature for StealthPaymentAnnouncement
 // sn_keccak("StealthPaymentAnnouncement") — computed via starknet.js hash.getSelectorFromName
-const STEALTH_ANNOUNCEMENT_KEY = '0x370d4e719a5c006828be1792db85df647b592056f6d394cc14784ef00526003';
+const STEALTH_ANNOUNCEMENT_KEY = process.env.STEALTH_ANNOUNCEMENT_KEY || '0x370d4e719a5c006828be1792db85df647b592056f6d394cc14784ef00526003';
 
 interface StarknetEvent {
     block_number: number;
@@ -215,6 +218,17 @@ async function processEvents(events: StarknetEvent[]): Promise<number> {
 
             console.log(`Stored announcement: ${parsed.txHash.slice(0, 20)}... → ${parsed.stealthAddress.slice(0, 20)}...`);
             stored++;
+
+            // Broadcast to SSE clients
+            broadcast({
+                txHash: parsed.txHash,
+                stealthAddress: parsed.stealthAddress,
+                ephemeralPubKey: parsed.ephemeralPubKey,
+                token: parsed.token,
+                amount: parsed.amount,
+                blockNumber: parsed.blockNumber.toString(),
+                timestamp: parsed.timestamp.toISOString(),
+            });
         } catch (error) {
             console.error('Failed to store event:', error);
         }

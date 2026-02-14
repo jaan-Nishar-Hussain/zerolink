@@ -11,10 +11,16 @@ import {
     ExternalLink
 } from 'lucide-react';
 import { useAccount, useConnect, useSendTransaction } from '@starknet-react/core';
-import { cairo } from 'starknet';
 import { deriveStealthAddress, parsePublicKeyToCoordinates, type MetaAddress } from '../../lib/crypto';
 import { api } from '../../lib/api';
 import { useAppStore } from '../../store';
+import { CONTRACTS } from '../../lib/contracts/config';
+import {
+    createDepositNote,
+    buildDepositCalldata,
+    buildRelayRequest,
+    saveNote,
+} from '../../lib/crypto/private-send';
 import './Pay.css';
 
 // Fetch meta address from API with localStorage fallback
@@ -62,7 +68,6 @@ export function Pay() {
 
     const ETH_ADDRESS = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7';
     const STRK_ADDRESS = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
-    const STEALTH_PAYMENT_CONTRACT = import.meta.env.VITE_STEALTH_PAYMENT_CONTRACT;
 
     // The display alias is the URL alias or the manually entered one
     const displayAlias = urlAlias || recipientAlias;
@@ -167,50 +172,53 @@ export function Pay() {
 
             const coords = parsePublicKeyToCoordinates(ephemeralPubKey);
             const amountWei = BigInt(Math.floor(parseFloat(amount) * 1e18));
-            const amountU256 = cairo.uint256(amountWei);
-
             const tokenAddress = token === 'ETH' ? ETH_ADDRESS : STRK_ADDRESS;
+            const depositPoolAddress = CONTRACTS.DEPOSIT_POOL;
 
-            // On Starknet, ETH is an ERC20-like token, so we need to:
-            // 1. Approve the stealth payment contract to spend our tokens
-            // 2. Call send_token (not send_eth) which does transfer_from
-            const calls = [
-                // Step 1: Approve the stealth payment contract to spend the token
-                {
-                    contractAddress: tokenAddress,
-                    entrypoint: 'approve',
-                    calldata: [
-                        STEALTH_PAYMENT_CONTRACT as string,
-                        amountU256.low.toString(),
-                        amountU256.high.toString()
-                    ]
-                },
-                // Step 2: Call send_token which will transfer_from the approved amount
-                {
-                    contractAddress: STEALTH_PAYMENT_CONTRACT as string,
-                    entrypoint: 'send_token',
-                    calldata: [
-                        tokenAddress,
-                        stealthAddress,
-                        amountU256.low.toString(),
-                        amountU256.high.toString(),
-                        coords.x,
-                        coords.y
-                    ]
+            if (!depositPoolAddress || depositPoolAddress === '0x0') {
+                throw new Error('Deposit pool contract not configured. Set VITE_DEPOSIT_POOL_CONTRACT.');
+            }
+
+            // ─── Step 1: Create a deposit note (secret + nullifier + commitment) ───
+            const note = createDepositNote(amountWei.toString(), tokenAddress);
+
+            // ─── Step 2: Deposit into the shared pool ──────────────────────────────
+            // The user's wallet deposits into DepositPool — visible on-chain but NOT
+            // linked to any recipient. Many users deposit into the same pool.
+            const { approve, deposit } = buildDepositCalldata(note, depositPoolAddress);
+
+            const depositResult = await sendAsync([approve, deposit]);
+            note.depositTxHash = depositResult.transaction_hash;
+
+            // Save the note locally so we can track it
+            saveNote(note);
+
+            // ─── Step 3: Ask the relayer to withdraw to the stealth address ────────
+            // The relayer calls DepositPool.withdraw(...) from its own account,
+            // breaking the on-chain link between sender and recipient.
+            // If the relay fails, the deposit is safe — the note is saved locally
+            // and can be retried later.
+            let finalTxHash = depositResult.transaction_hash;
+            const relayReq = buildRelayRequest(note, stealthAddress);
+            try {
+                const relayResult = await api.submitRelay(relayReq);
+                if (relayResult.transactionHash) {
+                    finalTxHash = relayResult.transactionHash;
                 }
-            ];
+            } catch (relayErr: any) {
+                console.warn('Relay request failed (deposit is safe, can retry):', relayErr.message || relayErr);
+            }
 
-            const result = await sendAsync(calls);
-            setTxHash(result.transaction_hash);
+            setTxHash(finalTxHash);
             setStep('success');
 
             // Save sent transaction to the store
             useAppStore.getState().addPayment({
-                id: result.transaction_hash,
+                id: finalTxHash,
                 type: 'sent',
                 amount: amount,
                 token: token,
-                txHash: result.transaction_hash,
+                txHash: finalTxHash,
                 ephemeralPubKey: ephemeralPubKey,
                 stealthAddress: stealthAddress,
                 tokenAddress: tokenAddress,
@@ -219,10 +227,10 @@ export function Pay() {
                 status: 'confirmed',
             });
 
-            // Notify backend about the payment for faster indexing
+            // ─── Step 4: Announce the payment so the recipient can detect it ───────
             try {
                 await api.announcePayment({
-                    txHash: result.transaction_hash,
+                    txHash: finalTxHash,
                     stealthAddress,
                     ephemeralPubKey,
                     amount: amountWei.toString(),

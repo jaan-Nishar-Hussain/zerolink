@@ -3,11 +3,15 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
+import path from 'path';
 import { prisma } from './db';
 import aliasRoutes from './routes/alias';
 import announcementRoutes from './routes/announcements';
+import notificationRoutes from './routes/notifications';
+import relayRoutes from './routes/relay';
 
-dotenv.config();
+// Load .env explicitly from the backend directory so it works regardless of cwd
+dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -40,6 +44,8 @@ app.get('/health', (req, res) => {
 // Routes
 app.use('/api/alias', aliasRoutes);
 app.use('/api/announcements', announcementRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/relay', relayRoutes);
 
 // Error handler
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {

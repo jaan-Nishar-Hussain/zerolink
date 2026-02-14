@@ -17,6 +17,18 @@ pub trait IEventEmitter<TContractState> {
         ephemeral_pub_key_y: felt252,
     );
 
+    /// Announce with hidden amount (Pedersen commitment + encrypted blob)
+    fn announce_payment_private(
+        ref self: TContractState,
+        stealth_address: ContractAddress,
+        token: ContractAddress,
+        amount: u256,
+        amount_commitment: felt252,
+        encrypted_amount: felt252,
+        ephemeral_pub_key_x: felt252,
+        ephemeral_pub_key_y: felt252,
+    );
+
     /// Get the authorized payment contract
     fn get_payment_contract(self: @TContractState) -> ContractAddress;
     
@@ -60,7 +72,12 @@ pub mod EventEmitter {
         /// Token contract (0x0 for ETH)
         #[key]
         pub token: ContractAddress,
-        /// Amount transferred
+        /// Pedersen commitment to the amount: Pedersen(amount, blinding)
+        /// The actual amount is encrypted in `encrypted_amount` for the receiver only.
+        pub amount_commitment: felt252,
+        /// Encrypted amount blob (receiver decrypts with shared secret)
+        pub encrypted_amount: felt252,
+        /// Amount transferred (kept for backward compat / indexer; will be removed in v2)
         pub amount: u256,
         /// Ephemeral public key X coordinate
         pub ephemeral_pub_key_x: felt252,
@@ -108,10 +125,43 @@ pub mod EventEmitter {
             let index = self.announcement_count.read();
             self.announcement_count.write(index + 1);
 
-            // Emit announcement event
+            // Emit announcement event (amount_commitment & encrypted_amount = 0 for plain sends)
             self.emit(StealthPaymentAnnouncement {
                 stealth_address,
                 token,
+                amount_commitment: 0,
+                encrypted_amount: 0,
+                amount,
+                ephemeral_pub_key_x,
+                ephemeral_pub_key_y,
+                timestamp: get_block_timestamp(),
+                index,
+            });
+        }
+
+        /// Announce with hidden amount
+        fn announce_payment_private(
+            ref self: ContractState,
+            stealth_address: ContractAddress,
+            token: ContractAddress,
+            amount: u256,
+            amount_commitment: felt252,
+            encrypted_amount: felt252,
+            ephemeral_pub_key_x: felt252,
+            ephemeral_pub_key_y: felt252,
+        ) {
+            let caller = get_caller_address();
+            let authorized = self.payment_contract.read();
+            assert(caller == authorized, 'Unauthorized caller');
+
+            let index = self.announcement_count.read();
+            self.announcement_count.write(index + 1);
+
+            self.emit(StealthPaymentAnnouncement {
+                stealth_address,
+                token,
+                amount_commitment,
+                encrypted_amount,
                 amount,
                 ephemeral_pub_key_x,
                 ephemeral_pub_key_y,

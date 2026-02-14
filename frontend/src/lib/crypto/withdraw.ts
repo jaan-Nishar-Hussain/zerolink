@@ -1,18 +1,20 @@
 /**
  * ZeroLink Withdrawal Flow
  * 
- * Handles withdrawing funds from stealth addresses to main wallet
- * Uses the derived stealth private key to sign transactions
+ * Handles withdrawing funds from stealth addresses via the StealthPayment contract.
+ * Uses withdraw_eth_with_proof / withdraw_token_with_proof so no deployed account
+ * is needed at the stealth address — the user's connected wallet submits the tx.
  */
 
 import { Account, Contract, RpcProvider, cairo } from 'starknet';
-import { bytesToHex, deriveStealthPrivateKey, publicKeyToStarknetAddress, derivePublicKey } from './stealth';
+import { bytesToHex, deriveStealthPrivateKey, publicKeyToStarknetAddress, derivePublicKey, parsePublicKeyToCoordinates } from './stealth';
+import { CONTRACTS, STEALTH_PAYMENT_ABI } from '../contracts';
 
 // =============================================================================
 // CONFIGURATION
 // =============================================================================
 
-const STARKNET_RPC = import.meta.env.VITE_STARKNET_RPC || 'https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_10/XN9-BdSkx8Pw_0vERYc_f';
+const STARKNET_RPC = import.meta.env.VITE_STARKNET_RPC || 'https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_8/XN9-BdSkx8Pw_0vERYc_f';
 const STRK_TOKEN = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 const ETH_TOKEN = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7';
 
@@ -114,12 +116,17 @@ export async function getStealthBalances(
 // =============================================================================
 
 /**
- * Withdraw funds from a stealth address
- * 
- * This creates an account from the derived stealth private key
- * and executes a transfer to the recipient address.
+ * Withdraw funds from a stealth address using the StealthPayment contract.
+ *
+ * Instead of signing as the stealth account (which has no deployed contract),
+ * the user's connected wallet calls `withdraw_eth_with_proof` /
+ * `withdraw_token_with_proof`, supplying the stealth public key X coordinate
+ * as proof of ownership.
  */
-export async function withdrawFromStealth(params: WithdrawParams): Promise<WithdrawResult> {
+export async function withdrawFromStealth(
+    params: WithdrawParams,
+    connectedAccount: Account,  // user's actual connected wallet
+): Promise<WithdrawResult> {
     const {
         stealthAddress,
         ephemeralPubKey,
@@ -148,23 +155,48 @@ export async function withdrawFromStealth(params: WithdrawParams): Promise<Withd
         );
     }
 
-    // 3. Create provider and account
+    // 3. Get the stealth public key X coordinate for proof
+    const stealthPubKeyHex = bytesToHex(derivedPubKey);
+    const { x: pubKeyX } = parsePublicKeyToCoordinates(stealthPubKeyHex);
+
+    // 4. Build the contract call via the user's connected wallet
     const provider = getProvider();
-    const privateKeyHex = '0x' + bytesToHex(stealthPrivateKey);
-
-    // Note: For Starknet, we need the account to be deployed first
-    // Stealth accounts use a specific account class
-    const account = new Account(provider, stealthAddress, privateKeyHex);
-
-    // 4. Create transfer call
-    const tokenContract = new Contract(ERC20_ABI, tokenAddress, provider);
-    tokenContract.connect(account);
-
     const amountU256 = cairo.uint256(amount);
 
+    const isEth = tokenAddress === ETH_TOKEN ||
+        tokenAddress === '0x0' ||
+        tokenAddress === '0x0000000000000000000000000000000000000000000000000000000000000000';
+
     try {
-        // 5. Execute transfer
-        const tx = await tokenContract.transfer(recipientAddress, amountU256);
+        let calls;
+        if (isEth) {
+            calls = [{
+                contractAddress: CONTRACTS.STEALTH_PAYMENT,
+                entrypoint: 'withdraw_eth_with_proof',
+                calldata: [
+                    stealthAddress,
+                    recipientAddress,
+                    amountU256.low,
+                    amountU256.high,
+                    pubKeyX,
+                ],
+            }];
+        } else {
+            calls = [{
+                contractAddress: CONTRACTS.STEALTH_PAYMENT,
+                entrypoint: 'withdraw_token_with_proof',
+                calldata: [
+                    tokenAddress,
+                    stealthAddress,
+                    recipientAddress,
+                    amountU256.low,
+                    amountU256.high,
+                    pubKeyX,
+                ],
+            }];
+        }
+
+        const tx = await connectedAccount.execute(calls);
 
         console.log('Withdrawal transaction submitted:', tx.transaction_hash);
 
@@ -229,7 +261,8 @@ export async function withdrawAllPayments(
     payments: StealthPaymentWithKeys[],
     viewingPrivateKey: Uint8Array,
     spendPrivateKey: Uint8Array,
-    recipientAddress: string
+    recipientAddress: string,
+    connectedAccount: Account,
 ): Promise<WithdrawResult[]> {
     const results: WithdrawResult[] = [];
 
@@ -243,7 +276,7 @@ export async function withdrawAllPayments(
                 recipientAddress,
                 amount: payment.amount,
                 tokenAddress: payment.token,
-            });
+            }, connectedAccount);
 
             results.push(result);
         } catch (error) {

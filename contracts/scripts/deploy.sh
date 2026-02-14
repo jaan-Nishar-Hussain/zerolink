@@ -114,6 +114,26 @@ run_sncast invoke --contract-address "$EVENT_EMITTER_ADDRESS" \
     --calldata "$STEALTH_PAYMENT_ADDRESS" 2>&1 || true
 
 echo ""
+echo "📝 Step 8: Declaring DepositPool contract..."
+DEPOSIT_POOL_DECLARE=$(run_sncast declare --contract-name DepositPool 2>&1) || true
+echo "$DEPOSIT_POOL_DECLARE"
+
+DEPOSIT_POOL_CLASS_HASH=$(echo "$DEPOSIT_POOL_DECLARE" | grep "class_hash:" | awk '{print $2}')
+if [ -z "$DEPOSIT_POOL_CLASS_HASH" ]; then
+    DEPOSIT_POOL_CLASS_HASH=$(echo "$DEPOSIT_POOL_DECLARE" | grep -oE '0x[a-fA-F0-9]+' | head -1)
+fi
+echo "   Class hash: $DEPOSIT_POOL_CLASS_HASH"
+
+echo ""
+echo "📝 Step 9: Deploying DepositPool..."
+DEPOSIT_POOL_DEPLOY=$(run_sncast deploy --class-hash "$DEPOSIT_POOL_CLASS_HASH" \
+    --constructor-calldata "$STARKNET_ACCOUNT_ADDRESS" 2>&1) || true
+echo "$DEPOSIT_POOL_DEPLOY"
+
+DEPOSIT_POOL_ADDRESS=$(echo "$DEPOSIT_POOL_DEPLOY" | grep "contract_address:" | awk '{print $2}')
+echo "   Deployed at: $DEPOSIT_POOL_ADDRESS"
+
+echo ""
 echo "✅ Deployment Complete!"
 echo "========================"
 echo ""
@@ -121,6 +141,7 @@ echo "Contract Addresses:"
 echo "  EventEmitter:    $EVENT_EMITTER_ADDRESS"
 echo "  StealthPayment:  $STEALTH_PAYMENT_ADDRESS"
 echo "  TokenAdapter:    $TOKEN_ADAPTER_ADDRESS"
+echo "  DepositPool:     $DEPOSIT_POOL_ADDRESS"
 
 # Save to file
 cat > deployed_addresses.json << EOF
@@ -130,7 +151,8 @@ cat > deployed_addresses.json << EOF
   "contracts": {
     "EventEmitter": "$EVENT_EMITTER_ADDRESS",
     "StealthPayment": "$STEALTH_PAYMENT_ADDRESS",
-    "TokenAdapter": "$TOKEN_ADAPTER_ADDRESS"
+    "TokenAdapter": "$TOKEN_ADAPTER_ADDRESS",
+    "DepositPool": "$DEPOSIT_POOL_ADDRESS"
   }
 }
 EOF

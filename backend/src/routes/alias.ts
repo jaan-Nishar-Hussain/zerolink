@@ -1,9 +1,41 @@
 import { Router } from 'express';
 import { prisma } from '../db';
 import { z } from 'zod';
-import { requireOwnership } from '../middleware/auth';
+import crypto from 'crypto';
 
 const router = Router();
+
+// ─── Nonce store for challenge-response auth ────────────────────────
+const nonceStore = new Map<string, { alias: string; expiresAt: Date }>();
+
+// Clean expired nonces every 5 minutes
+setInterval(() => {
+    const now = new Date();
+    for (const [nonce, data] of nonceStore) {
+        if (data.expiresAt < now) nonceStore.delete(nonce);
+    }
+}, 5 * 60 * 1000);
+
+// ─── Lazy-load ESM-only @noble libraries ────────────────────────────
+async function verifySecp256k1Signature(
+    signatureHex: string,
+    messageHex: string,
+    pubKeyHex: string,
+): Promise<boolean> {
+    // Dynamic import for ESM-only @noble packages
+    const curves = await (Function('return import("@noble/curves/secp256k1")')() as Promise<any>);
+    const hashes = await (Function('return import("@noble/hashes/sha256")')() as Promise<any>);
+    const utils = await (Function('return import("@noble/hashes/utils")')() as Promise<any>);
+
+    const { secp256k1 } = curves;
+    const { sha256 } = hashes;
+    const { hexToBytes } = utils;
+
+    const messageHash = sha256(hexToBytes(messageHex));
+    const sigBytes = hexToBytes(signatureHex);
+    const pubKeyBytes = hexToBytes(pubKeyHex);
+    return secp256k1.verify(sigBytes, messageHash, pubKeyBytes);
+}
 
 // Zod validation schemas
 const aliasSchema = z.string()
@@ -125,19 +157,21 @@ router.post('/', async (req, res) => {
 });
 
 /**
- * PUT /api/alias/:alias
- * Update alias metadata (displayName, avatar)
- * Requires ownership verification — signerAddress must match registered owner
+ * GET /api/alias/:alias/challenge
+ * Request a nonce for signing before updating alias metadata.
+ * Returns a random nonce the client must sign with their spend key.
  */
-router.put<AliasParams>('/:alias', requireOwnership, async (req, res) => {
+router.get<AliasParams>('/:alias/challenge', async (req, res) => {
     try {
-        const alias = req.params.alias;
-        const { displayName, avatarUrl, signerAddress } = req.body;
+        const alias = req.params.alias?.toLowerCase();
+        if (!alias) {
+            res.status(400).json({ error: 'Alias parameter required' });
+            return;
+        }
 
-        // Verify ownership: signer must match registered address
         const existing = await prisma.alias.findUnique({
-            where: { alias: alias.toLowerCase() },
-            select: { signerAddress: true },
+            where: { alias },
+            select: { alias: true },
         });
 
         if (!existing) {
@@ -145,10 +179,77 @@ router.put<AliasParams>('/:alias', requireOwnership, async (req, res) => {
             return;
         }
 
-        if (existing.signerAddress && existing.signerAddress !== signerAddress) {
-            res.status(403).json({ error: 'Unauthorized — signer does not own this alias' });
+        const nonce = crypto.randomBytes(32).toString('hex');
+        nonceStore.set(nonce, {
+            alias,
+            expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 min TTL
+        });
+
+        res.json({ nonce, expiresIn: 300 });
+    } catch (error) {
+        console.error('Error generating challenge:', error);
+        res.status(500).json({ error: 'Failed to generate challenge' });
+    }
+});
+
+/**
+ * PUT /api/alias/:alias
+ * Update alias metadata (displayName, avatar)
+ * Requires challenge-response: client signs the nonce with their spend private key
+ * Body: { nonce, signature, displayName?, avatarUrl? }
+ */
+router.put<AliasParams>('/:alias', async (req, res) => {
+    try {
+        const alias = req.params.alias;
+        const { nonce, signature, displayName, avatarUrl } = req.body;
+
+        // 1. Validate nonce
+        if (!nonce || !signature) {
+            res.status(400).json({ error: 'nonce and signature are required' });
             return;
         }
+
+        const challenge = nonceStore.get(nonce);
+        if (!challenge) {
+            res.status(401).json({ error: 'Invalid or expired nonce' });
+            return;
+        }
+
+        if (challenge.alias !== alias.toLowerCase() || challenge.expiresAt < new Date()) {
+            nonceStore.delete(nonce);
+            res.status(401).json({ error: 'Nonce mismatch or expired' });
+            return;
+        }
+
+        // 2. Look up the alias to get the registered spendPubKey
+        const existing = await prisma.alias.findUnique({
+            where: { alias: alias.toLowerCase() },
+            select: { spendPubKey: true },
+        });
+
+        if (!existing) {
+            nonceStore.delete(nonce);
+            res.status(404).json({ error: 'Alias not found' });
+            return;
+        }
+
+        // 3. Verify secp256k1 signature over SHA-256(nonce)
+        try {
+            const valid = await verifySecp256k1Signature(signature, nonce, existing.spendPubKey);
+
+            if (!valid) {
+                nonceStore.delete(nonce);
+                res.status(403).json({ error: 'Invalid signature — you do not own this alias' });
+                return;
+            }
+        } catch (err) {
+            nonceStore.delete(nonce);
+            res.status(403).json({ error: 'Signature verification failed' });
+            return;
+        }
+
+        // 4. Consume nonce and apply update
+        nonceStore.delete(nonce);
 
         const updated = await prisma.alias.update({
             where: { alias: alias.toLowerCase() },

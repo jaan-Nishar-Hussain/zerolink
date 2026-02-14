@@ -10,10 +10,13 @@ import {
     Eye,
     EyeOff,
     Copy,
-    Loader2
+    Loader2,
+    RefreshCw
 } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { clearKeys, exportEncryptedBackup, importEncryptedBackup } from '../../lib/crypto/storage';
+import { rescanPayments, type RescanProgress } from '../../lib/crypto/rescan';
+import type { StealthKeys } from '../../lib/crypto/stealth';
 import './Settings.css';
 
 export function Settings() {
@@ -23,9 +26,11 @@ export function Settings() {
     const [exportStatus, setExportStatus] = useState<'idle' | 'exporting' | 'done' | 'error'>('idle');
     const [importStatus, setImportStatus] = useState<'idle' | 'importing' | 'done' | 'error'>('idle');
     const [importError, setImportError] = useState<string | null>(null);
+    const [rescanStatus, setRescanStatus] = useState<'idle' | 'scanning' | 'done' | 'error'>('idle');
+    const [rescanProgress, setRescanProgress] = useState<RescanProgress | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const { alias, metaAddress, isUnlocked, reset } = useAppStore();
+    const { alias, metaAddress, isUnlocked, reset, addPayment } = useAppStore();
 
     const copyToClipboard = (text: string, key: string) => {
         navigator.clipboard.writeText(text);
@@ -79,6 +84,49 @@ export function Settings() {
         }
         // Reset file input
         if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const handleRescan = async () => {
+        if (!metaAddress) return;
+        setRescanStatus('scanning');
+        setRescanProgress(null);
+        try {
+            // Reconstruct a minimal StealthKeys from the store's metaAddress.
+            // Private keys are needed — the real app should load them from IndexedDB.
+            // For now we import the helper that loads from secure storage.
+            const { loadKeys } = await import('../../lib/crypto/storage');
+            const keys = await loadKeys();
+            if (!keys) {
+                setRescanStatus('error');
+                return;
+            }
+
+            const detected = await rescanPayments(
+                keys as StealthKeys,
+                '0',
+                (p) => setRescanProgress(p),
+            );
+
+            for (const d of detected) {
+                addPayment({
+                    id: d.txHash,
+                    type: 'received',
+                    amount: d.amount,
+                    token: d.token,
+                    txHash: d.txHash,
+                    ephemeralPubKey: d.ephemeralPubKey,
+                    stealthAddress: d.stealthAddress,
+                    tokenAddress: d.token,
+                    timestamp: Date.now(),
+                    status: 'confirmed',
+                });
+            }
+
+            setRescanStatus('done');
+            setTimeout(() => setRescanStatus('idle'), 4000);
+        } catch {
+            setRescanStatus('error');
+        }
     };
 
     if (!isUnlocked) {
@@ -251,6 +299,41 @@ export function Settings() {
                                 {importError}
                             </div>
                         )}
+                    </div>
+                </div>
+
+                {/* Rescan Payments */}
+                <div className="settings-section glass animate-slide-up" style={{ animationDelay: '0.25s' }}>
+                    <div className="section-header">
+                        <div className="section-icon">
+                            <RefreshCw size={20} />
+                        </div>
+                        <div>
+                            <h3>Rescan Payments</h3>
+                            <p className="text-muted">Re-scan on-chain events to find missed payments</p>
+                        </div>
+                    </div>
+
+                    <div className="section-content">
+                        <p className="text-secondary">
+                            If you restored from backup or think payments were missed, rescan
+                            all on-chain announcements to recover them.
+                        </p>
+                        <button
+                            className="btn btn-secondary"
+                            onClick={handleRescan}
+                            disabled={rescanStatus === 'scanning'}
+                        >
+                            {rescanStatus === 'scanning' ? (
+                                <><Loader2 size={18} className="icon-spin" /> Scanning... {rescanProgress ? `(${rescanProgress.scanned} checked, ${rescanProgress.found} found)` : ''}</>
+                            ) : rescanStatus === 'done' ? (
+                                <><Check size={18} /> Rescan Complete{rescanProgress ? ` — ${rescanProgress.found} payments found` : ''}</>
+                            ) : rescanStatus === 'error' ? (
+                                <><AlertCircle size={18} /> Rescan Failed — Try Again</>
+                            ) : (
+                                <><RefreshCw size={18} /> Rescan Payments</>
+                            )}
+                        </button>
                     </div>
                 </div>
 
