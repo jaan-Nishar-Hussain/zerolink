@@ -50,6 +50,15 @@ interface RPCResponse {
 
 /**
  * Parse a StealthPaymentAnnouncement event
+ *
+ * Event data layout (after privacy update):
+ *   data[0]: amount_commitment  (felt252 — Pedersen commitment)
+ *   data[1]: encrypted_amount   (felt252 — real amount for recipient)
+ *   data[2..3]: amount          (u256 low/high — now always 0)
+ *   data[4]: ephemeral_pub_key_x
+ *   data[5]: ephemeral_pub_key_y
+ *   data[6]: timestamp          (u64)
+ *   data[7..8]: index           (u256)
  */
 function parseAnnouncementEvent(event: StarknetEvent, blockNumber: number, timestamp: Date): {
     txHash: string;
@@ -61,27 +70,27 @@ function parseAnnouncementEvent(event: StarknetEvent, blockNumber: number, times
     timestamp: Date;
 } | null {
     try {
-        // Event structure:
         // keys[0]: event selector
         // keys[1]: stealth_address
         // keys[2]: token
-        // data[0..1]: amount (u256 as low, high)
-        // data[2]: ephemeral_pub_key_x
-        // data[3]: ephemeral_pub_key_y
-        // data[4]: timestamp (u64)
-        // data[5..6]: index (u256)
-
         const stealthAddress = event.keys[1];
         const token = event.keys[2];
 
-        // Parse u256 amount from two felt252
-        const amountLow = BigInt(event.data[0] || '0');
-        const amountHigh = BigInt(event.data[1] || '0');
-        const amount = (amountHigh << BigInt(128)) + amountLow;
+        // data[0]: amount_commitment (Pedersen hash)
+        // data[1]: encrypted_amount  (real amount as felt252)
+        const encryptedAmount = BigInt(event.data[1] || '0');
 
-        // Combine ephemeral public key coordinates
-        const ephemeralPubKeyX = event.data[2];
-        const ephemeralPubKeyY = event.data[3];
+        // data[2..3]: public amount u256 (now always 0 for privacy)
+        const amountLow = BigInt(event.data[2] || '0');
+        const amountHigh = BigInt(event.data[3] || '0');
+        const publicAmount = (amountHigh << BigInt(128)) + amountLow;
+
+        // Use encrypted_amount if public amount is 0 (privacy-enabled)
+        const amount = publicAmount > 0n ? publicAmount : encryptedAmount;
+
+        // Ephemeral public key coordinates shifted by 2 positions
+        const ephemeralPubKeyX = event.data[4];
+        const ephemeralPubKeyY = event.data[5];
         const ephemeralPubKey = `${ephemeralPubKeyX}:${ephemeralPubKeyY}`;
 
         return {

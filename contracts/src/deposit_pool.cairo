@@ -1,21 +1,27 @@
 /// ZeroLink Deposit Pool Contract
 ///
-/// Implements a simple commitment-based deposit pool to break the on-chain link
-/// between sender and recipient.  Senders deposit tokens with a Pedersen commitment;
-/// withdrawals supply a nullifier that proves ownership of one deposit without
-/// revealing which one.
+/// Implements a fixed-denomination commitment-based deposit pool to break the
+/// on-chain link between sender and recipient.  All deposits within a token
+/// use one of the allowed denominations (e.g. 1, 10, 100 tokens) so that
+/// individual deposits are indistinguishable — exactly like Tornado Cash.
 ///
 /// Flow:
-///   1. Sender computes commitment = Pedersen(secret, nullifier) off-chain
-///   2. Sender calls deposit(commitment, token, amount)
+///   1. Sender computes commitment = Pedersen(secret, nullifier_hash) off-chain
+///   2. Sender calls deposit(commitment, token, amount) — amount must be a valid denomination
 ///   3. Relayer calls withdraw(nullifier_hash, commitment, recipient, amount, token, secret)
 ///      — the contract re-derives the commitment and checks the nullifier was not used
+///
+/// Privacy guarantees:
+///   - The Deposited event does NOT contain the amount (all deposits in a tier are identical)
+///   - The sender address is visible on-chain (inherent L2 property), but cannot be
+///     linked to a specific withdrawal because many users deposit the same denomination
 
 use starknet::ContractAddress;
 
 #[starknet::interface]
 pub trait IDepositPool<TContractState> {
     /// Deposit into the pool. commitment = Pedersen(secret, nullifier)
+    /// amount must be one of the valid denominations
     fn deposit(ref self: TContractState, commitment: felt252, token: ContractAddress, amount: u256);
 
     /// Withdraw from the pool to a recipient.
@@ -38,6 +44,12 @@ pub trait IDepositPool<TContractState> {
 
     /// Get the pool balance for a given token
     fn get_pool_balance(self: @TContractState, token: ContractAddress) -> u256;
+
+    /// Check if an amount is a valid denomination
+    fn is_valid_denomination(self: @TContractState, amount: u256) -> bool;
+
+    /// Admin: add or remove a valid denomination
+    fn set_denomination(ref self: TContractState, amount: u256, valid: bool);
 }
 
 #[starknet::contract]
@@ -60,6 +72,8 @@ pub mod DepositPool {
         nullifiers: Map<felt252, bool>,
         // token => total pool balance
         pool_balances: Map<ContractAddress, u256>,
+        // valid denominations (amount => allowed flag)
+        valid_denominations: Map<u256, bool>,
     }
 
     #[event]
@@ -69,12 +83,13 @@ pub mod DepositPool {
         Withdrawn: Withdrawn,
     }
 
+    /// Deposited event — deliberately omits amount to prevent correlation.
+    /// All deposits in a denomination tier are indistinguishable.
     #[derive(Drop, starknet::Event)]
     pub struct Deposited {
         #[key]
         pub commitment: felt252,
         pub token: ContractAddress,
-        pub amount: u256,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -83,12 +98,19 @@ pub mod DepositPool {
         pub nullifier_hash: felt252,
         pub recipient: ContractAddress,
         pub token: ContractAddress,
-        pub amount: u256,
     }
 
     #[constructor]
     fn constructor(ref self: ContractState, owner: ContractAddress) {
         self.owner.write(owner);
+
+        // Default denominations: 1, 10, 100 tokens (in wei, 18 decimals)
+        // 1 token  = 1_000_000_000_000_000_000
+        // 10 tokens = 10_000_000_000_000_000_000
+        // 100 tokens = 100_000_000_000_000_000_000
+        self.valid_denominations.write(1_000_000_000_000_000_000_u256, true);
+        self.valid_denominations.write(10_000_000_000_000_000_000_u256, true);
+        self.valid_denominations.write(100_000_000_000_000_000_000_u256, true);
     }
 
     #[abi(embed_v0)]
@@ -102,6 +124,8 @@ pub mod DepositPool {
             // Must not re-use a commitment
             assert(self.commitments.read(commitment) == 0, 'Commitment already used');
             assert(amount > 0, 'Amount must be > 0');
+            // Amount must be one of the valid denominations
+            assert(self.valid_denominations.read(amount), 'Invalid denomination');
 
             let caller = get_caller_address();
             let this = get_contract_address();
@@ -118,7 +142,8 @@ pub mod DepositPool {
             let current = self.pool_balances.read(token);
             self.pool_balances.write(token, current + amount);
 
-            self.emit(Deposited { commitment, token, amount });
+            // Emit event WITHOUT amount — all deposits in a tier are indistinguishable
+            self.emit(Deposited { commitment, token });
         }
 
         fn withdraw(
@@ -154,7 +179,8 @@ pub mod DepositPool {
             let current = self.pool_balances.read(token);
             self.pool_balances.write(token, current - amount);
 
-            self.emit(Withdrawn { nullifier_hash, recipient, token, amount });
+            // Emit event WITHOUT amount
+            self.emit(Withdrawn { nullifier_hash, recipient, token });
         }
 
         fn is_committed(self: @ContractState, commitment: felt252) -> bool {
@@ -167,6 +193,17 @@ pub mod DepositPool {
 
         fn get_pool_balance(self: @ContractState, token: ContractAddress) -> u256 {
             self.pool_balances.read(token)
+        }
+
+        fn is_valid_denomination(self: @ContractState, amount: u256) -> bool {
+            self.valid_denominations.read(amount)
+        }
+
+        fn set_denomination(ref self: ContractState, amount: u256, valid: bool) {
+            let caller = get_caller_address();
+            let owner = self.owner.read();
+            assert(caller == owner, 'Only owner');
+            self.valid_denominations.write(amount, valid);
         }
     }
 }

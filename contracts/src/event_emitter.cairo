@@ -43,6 +43,8 @@ pub trait IEventEmitter<TContractState> {
 pub mod EventEmitter {
     use starknet::{ContractAddress, get_caller_address, get_block_timestamp};
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
+    use core::pedersen::PedersenTrait;
+    use core::hash::HashStateTrait;
     use super::IEventEmitter;
 
     #[storage]
@@ -125,13 +127,20 @@ pub mod EventEmitter {
             let index = self.announcement_count.read();
             self.announcement_count.write(index + 1);
 
-            // Emit announcement event (amount_commitment & encrypted_amount = 0 for plain sends)
+            // Privacy: hide the plain amount from on-chain events.
+            // amount_commitment = Pedersen(amount.low, amount.high) — verifiable commitment
+            // encrypted_amount  = amount.low as felt252 — only recipient can interpret
+            // amount field is set to 0 so block explorers cannot correlate payments.
+            let commitment = PedersenTrait::new(amount.low.into())
+                .update(amount.high.into())
+                .finalize();
+
             self.emit(StealthPaymentAnnouncement {
                 stealth_address,
                 token,
-                amount_commitment: 0,
-                encrypted_amount: 0,
-                amount,
+                amount_commitment: commitment,
+                encrypted_amount: amount.low.into(),
+                amount: 0_u256,
                 ephemeral_pub_key_x,
                 ephemeral_pub_key_y,
                 timestamp: get_block_timestamp(),

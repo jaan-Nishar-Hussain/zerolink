@@ -9,10 +9,70 @@
  *   4. Sender stores the "deposit note" locally (secret, nullifier, amount, token)
  *   5. Relayer later calls DepositPool.withdraw(...) to pay the stealth address
  *      without linking sender ↔ recipient on-chain
+ *
+ * Privacy: deposits use **fixed denominations** (like Tornado Cash) so that
+ * all deposits in a tier are indistinguishable. If a user wants to send 5 tokens,
+ * the system splits it into 5 × 1-token deposits.
  */
 
 import { pedersen } from '@scure/starknet';
-import { bytesToHex, hexToBytes } from './stealth';
+import { bytesToHex } from './stealth';
+
+// ─── Fixed Denominations ──────────────────────────────────────────
+
+/** Valid denominations in wei (must match the on-chain DepositPool contract) */
+export const DENOMINATIONS = [
+    { label: '1', wei: '1000000000000000000' },      // 1 token
+    { label: '10', wei: '10000000000000000000' },     // 10 tokens
+    { label: '100', wei: '100000000000000000000' },   // 100 tokens
+] as const;
+
+/** Map wei string → human-readable label */
+const WEI_TO_LABEL: Record<string, string> = {};
+for (const d of DENOMINATIONS) {
+    WEI_TO_LABEL[d.wei] = d.label;
+}
+
+/**
+ * Split an arbitrary amount (in human units, e.g. "5") into the minimum set
+ * of fixed-denomination deposits.
+ *
+ * Example: splitAmount("25") → [
+ *   { wei: "10000000000000000000", count: 2 },
+ *   { wei: "1000000000000000000",  count: 5 },
+ * ]
+ *
+ * Returns null if the amount cannot be represented with the available
+ * denominations (e.g. "0.5" when smallest tier is 1).
+ */
+export function splitAmountIntoDenominations(
+    amountHuman: string,
+): { wei: string; label: string; count: number }[] | null {
+    let remaining = parseFloat(amountHuman);
+    if (remaining <= 0 || !Number.isFinite(remaining)) return null;
+
+    const result: { wei: string; label: string; count: number }[] = [];
+
+    // Sort denominations largest-first for greedy split
+    const sorted = [...DENOMINATIONS].sort(
+        (a, b) => parseFloat(b.label) - parseFloat(a.label),
+    );
+
+    for (const denom of sorted) {
+        const denomValue = parseFloat(denom.label);
+        const count = Math.floor(remaining / denomValue);
+        if (count > 0) {
+            result.push({ wei: denom.wei, label: denom.label, count });
+            remaining -= count * denomValue;
+            // Float precision guard
+            remaining = Math.round(remaining * 1e12) / 1e12;
+        }
+    }
+
+    if (remaining > 0) return null; // cannot represent exactly
+
+    return result;
+}
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -23,7 +83,7 @@ export interface DepositNote {
     nullifier: string;
     /** Pedersen(secret, nullifierHash) commitment stored on-chain */
     commitment: string;
-    /** Deposited amount (as decimal string) */
+    /** Deposited amount (as decimal string, in wei) */
     amount: string;
     /** Token contract address */
     token: string;
@@ -52,10 +112,6 @@ function randomFelt(): string {
 /**
  * Compute the nullifier hash: Pedersen(nullifier, 0)
  * (0 is a domain separator to differentiate from commitment derivation)
- *
- * We pass BigInt to pedersen() because it returns hex strings that can have
- * odd length (e.g. 63 chars), and re-feeding those into pedersen() causes
- * "Input string must contain hex characters in even length" from Uint8Array.fromHex.
  */
 function nullifierHash(nullifier: string): string {
     return pedersen(BigInt(nullifier), 0n).toString();

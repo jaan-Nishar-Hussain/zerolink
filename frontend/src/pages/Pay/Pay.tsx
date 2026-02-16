@@ -20,6 +20,8 @@ import {
     buildDepositCalldata,
     buildRelayRequest,
     saveNote,
+    DENOMINATIONS,
+    splitAmountIntoDenominations,
 } from '../../lib/crypto/private-send';
 import './Pay.css';
 
@@ -59,6 +61,8 @@ export function Pay() {
     const [recipientLoading, setRecipientLoading] = useState(!!urlAlias);
     const [step, setStep] = useState<'amount' | 'confirm' | 'success'>('amount');
     const [lookupComplete, setLookupComplete] = useState(false);
+    const [selectedDenom, setSelectedDenom] = useState<string>(DENOMINATIONS[0].wei);
+    const [depositCount, setDepositCount] = useState(1);
 
     const { address: userAddress, account } = useAccount();
     const { connect, connectors } = useConnect();
@@ -120,10 +124,9 @@ export function Pay() {
     };
 
     const handleContinue = async () => {
-        if (!amount || parseFloat(amount) <= 0) {
-            setError('Please enter a valid amount');
-            return;
-        }
+        const denomLabel = DENOMINATIONS.find(d => d.wei === selectedDenom)?.label || '1';
+        const totalAmount = (parseFloat(denomLabel) * depositCount).toString();
+        setAmount(totalAmount);
 
         setError('');
         setLoading(true);
@@ -171,7 +174,6 @@ export function Pay() {
             }
 
             const coords = parsePublicKeyToCoordinates(ephemeralPubKey);
-            const amountWei = BigInt(Math.floor(parseFloat(amount) * 1e18));
             const tokenAddress = token === 'ETH' ? ETH_ADDRESS : STRK_ADDRESS;
             const depositPoolAddress = CONTRACTS.DEPOSIT_POOL;
 
@@ -179,44 +181,48 @@ export function Pay() {
                 throw new Error('Deposit pool contract not configured. Set VITE_DEPOSIT_POOL_CONTRACT.');
             }
 
-            // ─── Step 1: Create a deposit note (secret + nullifier + commitment) ───
-            const note = createDepositNote(amountWei.toString(), tokenAddress);
+            // ─── Fixed-denomination deposits ────────────────────────────────
+            // Each deposit uses a valid denomination. For amounts > 1 tier,
+            // we split into multiple deposits.
+            let finalTxHash = '';
+            const allNotes: any[] = [];
 
-            // ─── Step 2: Deposit into the shared pool ──────────────────────────────
-            // The user's wallet deposits into DepositPool — visible on-chain but NOT
-            // linked to any recipient. Many users deposit into the same pool.
-            const { approve, deposit } = buildDepositCalldata(note, depositPoolAddress);
+            for (let i = 0; i < depositCount; i++) {
+                const note = createDepositNote(selectedDenom, tokenAddress);
+                const { approve, deposit } = buildDepositCalldata(note, depositPoolAddress);
 
-            const depositResult = await sendAsync([approve, deposit]);
-            note.depositTxHash = depositResult.transaction_hash;
+                const depositResult = await sendAsync([approve, deposit]);
+                note.depositTxHash = depositResult.transaction_hash;
+                finalTxHash = depositResult.transaction_hash;
 
-            // Save the note locally so we can track it
-            saveNote(note);
+                saveNote(note);
+                allNotes.push(note);
+            }
 
-            // ─── Step 3: Ask the relayer to withdraw to the stealth address ────────
-            // The relayer calls DepositPool.withdraw(...) from its own account,
-            // breaking the on-chain link between sender and recipient.
-            // If the relay fails, the deposit is safe — the note is saved locally
-            // and can be retried later.
-            let finalTxHash = depositResult.transaction_hash;
-            const relayReq = buildRelayRequest(note, stealthAddress);
-            try {
-                const relayResult = await api.submitRelay(relayReq);
-                if (relayResult.transactionHash) {
-                    finalTxHash = relayResult.transactionHash;
+            // ─── Ask the relayer to withdraw to the stealth address ────────
+            // Use the first note for the relay request (relayer handles one at a time)
+            for (const note of allNotes) {
+                const relayReq = buildRelayRequest(note, stealthAddress);
+                try {
+                    const relayResult = await api.submitRelay(relayReq);
+                    if (relayResult.transactionHash) {
+                        finalTxHash = relayResult.transactionHash;
+                    }
+                } catch (relayErr: any) {
+                    console.warn('Relay request failed (deposit is safe, can retry):', relayErr.message || relayErr);
                 }
-            } catch (relayErr: any) {
-                console.warn('Relay request failed (deposit is safe, can retry):', relayErr.message || relayErr);
             }
 
             setTxHash(finalTxHash);
             setStep('success');
 
             // Save sent transaction to the store
+            const denomLabel = DENOMINATIONS.find(d => d.wei === selectedDenom)?.label || '1';
+            const totalAmount = (parseFloat(denomLabel) * depositCount).toString();
             useAppStore.getState().addPayment({
                 id: finalTxHash,
                 type: 'sent',
-                amount: amount,
+                amount: totalAmount,
                 token: token,
                 txHash: finalTxHash,
                 ephemeralPubKey: ephemeralPubKey,
@@ -227,13 +233,14 @@ export function Pay() {
                 status: 'confirmed',
             });
 
-            // ─── Step 4: Announce the payment so the recipient can detect it ───────
+            // ─── Announce the payment so the recipient can detect it ───────
+            const totalWei = BigInt(selectedDenom) * BigInt(depositCount);
             try {
                 await api.announcePayment({
                     txHash: finalTxHash,
                     stealthAddress,
                     ephemeralPubKey,
-                    amount: amountWei.toString(),
+                    amount: totalWei.toString(),
                     token: tokenAddress,
                     timestamp: new Date().toISOString()
                 });
@@ -331,26 +338,53 @@ export function Pay() {
                                     </div>
                                 )}
 
-                                {/* Show amount input when we have a recipient (URL alias or looked up) */}
+                                {/* Show denomination picker when we have a recipient */}
                                 {showAmountInput && (
                                     <div className="amount-section">
-                                        <div className="amount-label">Amount ({token})</div>
-                                        <input
-                                            type="number"
-                                            className="input amount-input"
-                                            placeholder="0.00"
-                                            value={amount}
-                                            onChange={(e) => setAmount(e.target.value)}
-                                            step="0.001"
-                                            min="0"
-                                            style={{
-                                                background: 'transparent',
-                                                border: 'none',
-                                                fontSize: '1.5rem',
-                                                padding: '0'
-                                            }}
-                                        />
-                                        <div className="amount-hint">Enter the amount you want to send</div>
+                                        <div className="amount-label">Select Amount ({token})</div>
+                                        <div style={{
+                                            display: 'flex',
+                                            gap: '0.5rem',
+                                            marginBottom: '1rem',
+                                        }}>
+                                            {DENOMINATIONS.map((d) => (
+                                                <button
+                                                    key={d.wei}
+                                                    className={`btn ${selectedDenom === d.wei ? 'btn-primary' : 'btn-secondary'}`}
+                                                    onClick={() => {
+                                                        setSelectedDenom(d.wei);
+                                                        setDepositCount(1);
+                                                    }}
+                                                    style={{ flex: 1, padding: '0.75rem 0.5rem' }}
+                                                >
+                                                    {d.label} {token}
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                                            <label className="amount-label" style={{ margin: 0, whiteSpace: 'nowrap' }}>×</label>
+                                            <input
+                                                type="number"
+                                                className="input"
+                                                value={depositCount}
+                                                onChange={(e) => setDepositCount(Math.max(1, parseInt(e.target.value) || 1))}
+                                                min="1"
+                                                max="20"
+                                                style={{
+                                                    width: '4rem',
+                                                    textAlign: 'center',
+                                                    background: 'transparent',
+                                                    borderColor: 'var(--border)',
+                                                }}
+                                            />
+                                            <span className="text-secondary" style={{ fontSize: '0.9rem' }}>
+                                                = {(parseFloat(DENOMINATIONS.find(d => d.wei === selectedDenom)?.label || '1') * depositCount).toFixed(0)} {token}
+                                            </span>
+                                        </div>
+                                        <div className="amount-hint">
+                                            Fixed denominations protect your privacy — all deposits in a tier look identical on-chain
+                                        </div>
                                     </div>
                                 )}
 
@@ -375,7 +409,7 @@ export function Pay() {
                                         ) : (
                                             <>
                                                 <Send size={18} />
-                                                Send {amount || '0'} {token}
+                                                Send {(parseFloat(DENOMINATIONS.find(d => d.wei === selectedDenom)?.label || '1') * depositCount).toFixed(0)} {token}
                                             </>
                                         )}
                                     </button>
