@@ -240,19 +240,10 @@ router.post('/announce', announceLimiter, async (req, res) => {
             return;
         }
 
-        // Verify the transaction exists on-chain before storing
-        try {
-            const receipt = await provider.getTransactionReceipt(txHash);
-            if (!receipt || !receipt.isSuccess()) {
-                res.status(400).json({ error: 'Transaction not confirmed on-chain' });
-                return;
-            }
-        } catch {
-            res.status(400).json({ error: 'Transaction not found on-chain' });
-            return;
-        }
-
-        // Create announcement
+        // Store the announcement optimistically.
+        // The tx may not be confirmed on-chain yet since the frontend calls
+        // announce immediately after submitting the transaction.
+        // The indexer will verify and update later.
         const announcement = await prisma.stealthAnnouncement.create({
             data: {
                 txHash,
@@ -263,6 +254,17 @@ router.post('/announce', announceLimiter, async (req, res) => {
                 blockNumber: BigInt(0), // Will be updated by indexer
                 timestamp: timestamp ? new Date(timestamp) : new Date(),
             },
+        });
+
+        // Try on-chain verification in the background (non-blocking)
+        provider.getTransactionReceipt(txHash).then(receipt => {
+            if (receipt && receipt.isSuccess()) {
+                console.log(`Announcement ${announcement.id} verified on-chain`);
+            } else {
+                console.warn(`Announcement ${announcement.id} tx not yet confirmed, will be verified by indexer`);
+            }
+        }).catch(() => {
+            console.warn(`Announcement ${announcement.id} could not verify tx yet, indexer will handle it`);
         });
 
         res.status(201).json({

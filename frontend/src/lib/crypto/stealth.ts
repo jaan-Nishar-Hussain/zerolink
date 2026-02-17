@@ -327,27 +327,47 @@ export function detectPayments(
 ): DetectedPayment[] {
     const detected: DetectedPayment[] = [];
 
-    for (const announcement of announcements) {
-        const result = checkStealthPayment(
-            viewingPrivateKey,
-            spendPrivateKey,
-            spendPublicKey,
-            announcement.ephemeralPubKey,
-            announcement.stealthAddress
-        );
+    console.log(`[detectPayments] Scanning ${announcements.length} announcements`);
+    console.log(`[detectPayments] spendPubKey: ${bytesToHex(spendPublicKey).substring(0, 20)}...`);
+    console.log(`[detectPayments] viewingPrivKey length: ${viewingPrivateKey.length}`);
 
-        if (result) {
-            detected.push({
-                stealthAddress: result.stealthAddress,
-                stealthPrivateKey: result.stealthPrivKey,
-                ephemeralPubKey: announcement.ephemeralPubKey,
-                amount: announcement.amount,
-                token: announcement.token,
-                txHash: announcement.txHash,
-            });
+    for (const announcement of announcements) {
+        console.log(`[detectPayments] Checking announcement tx=${announcement.txHash.substring(0, 15)}... ephKey=${announcement.ephemeralPubKey.substring(0, 20)}... expectedAddr=${announcement.stealthAddress.substring(0, 20)}...`);
+
+        try {
+            const result = checkStealthPayment(
+                viewingPrivateKey,
+                spendPrivateKey,
+                spendPublicKey,
+                announcement.ephemeralPubKey,
+                announcement.stealthAddress
+            );
+
+            if (result) {
+                console.log(`[detectPayments] ✅ MATCH FOUND! stealthAddr=${result.stealthAddress}`);
+                detected.push({
+                    stealthAddress: result.stealthAddress,
+                    stealthPrivateKey: result.stealthPrivKey,
+                    ephemeralPubKey: announcement.ephemeralPubKey,
+                    amount: announcement.amount,
+                    token: announcement.token,
+                    txHash: announcement.txHash,
+                });
+            } else {
+                // Debug: show what address we derived vs expected
+                const ephPub = hexToBytes(announcement.ephemeralPubKey);
+                const sharedSecret = computeSharedSecret(viewingPrivateKey, ephPub);
+                const tweak = computeTweak(sharedSecret);
+                const stealthPub = addTweakToPublicKey(spendPublicKey, tweak);
+                const derivedAddr = publicKeyToStarknetAddress(stealthPub);
+                console.log(`[detectPayments] ❌ No match. Derived: ${derivedAddr.substring(0, 25)}... Expected: ${announcement.stealthAddress.substring(0, 25)}...`);
+            }
+        } catch (err) {
+            console.error(`[detectPayments] Error checking announcement:`, err);
         }
     }
 
+    console.log(`[detectPayments] Total detected: ${detected.length}`);
     return detected;
 }
 

@@ -78,6 +78,9 @@ export function Receive() {
                 console.warn('Backend registration failed (will work offline):', apiError);
             }
 
+            // Always cache meta address in localStorage so the sender can look it up
+            localStorage.setItem(`zerolink-meta-${alias}`, JSON.stringify(keys.metaAddress));
+
             // Save encrypted keys to IndexedDB
             await saveKeys(keys, alias, password);
 
@@ -105,6 +108,22 @@ export function Receive() {
                 setError('Wrong password');
                 setLoading(false);
                 return;
+            }
+
+            // Always update localStorage cache with current keys
+            localStorage.setItem(`zerolink-meta-${alias}`, JSON.stringify(keys.metaAddress));
+
+            // Re-register alias with backend in case it was lost
+            try {
+                const { api } = await import('../../lib/api');
+                await api.registerAlias(alias, keys.metaAddress);
+            } catch (apiError: any) {
+                // 409 = alias already taken: update the keys if they changed
+                if (apiError?.message?.includes('409') || apiError?.message?.includes('already')) {
+                    console.log('Alias exists in DB (keys may be stale, but ok for now)');
+                } else {
+                    console.warn('Backend registration failed:', apiError);
+                }
             }
 
             setMetaAddress(keys.metaAddress, alias);

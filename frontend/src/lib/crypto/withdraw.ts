@@ -6,7 +6,7 @@
  * is needed at the stealth address — the user's connected wallet submits the tx.
  */
 
-import { Account, Contract, RpcProvider, cairo } from 'starknet';
+import { Account, AccountInterface, Contract, RpcProvider, cairo } from 'starknet';
 import { bytesToHex, deriveStealthPrivateKey, publicKeyToStarknetAddress, derivePublicKey, parsePublicKeyToCoordinates } from './stealth';
 import { CONTRACTS, STEALTH_PAYMENT_ABI } from '../contracts';
 
@@ -125,7 +125,7 @@ export async function getStealthBalances(
  */
 export async function withdrawFromStealth(
     params: WithdrawParams,
-    connectedAccount: Account,  // user's actual connected wallet
+    connectedAccount: AccountInterface,  // user's actual connected wallet
 ): Promise<WithdrawResult> {
     const {
         stealthAddress,

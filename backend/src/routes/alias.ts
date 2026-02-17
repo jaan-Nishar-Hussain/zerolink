@@ -124,19 +124,15 @@ router.post('/', async (req, res) => {
         const { alias, spendPubKey, viewingPubKey, displayName, signerAddress } = parseResult.data;
         const aliasLower = alias.toLowerCase();
 
-        // Check if alias already exists
-        const existing = await prisma.alias.findUnique({
+        // Upsert: create if new, or update keys if alias already exists.
+        // This handles key regeneration gracefully — the DB always has the latest keys.
+        const result = await prisma.alias.upsert({
             where: { alias: aliasLower },
-        });
-
-        if (existing) {
-            res.status(409).json({ error: 'Alias already taken' });
-            return;
-        }
-
-        // Create new alias
-        const newAlias = await prisma.alias.create({
-            data: {
+            update: {
+                spendPubKey,
+                viewingPubKey,
+            },
+            create: {
                 alias: aliasLower,
                 spendPubKey,
                 viewingPubKey,
@@ -147,8 +143,8 @@ router.post('/', async (req, res) => {
 
         res.status(201).json({
             message: 'Alias registered successfully',
-            alias: newAlias.alias,
-            createdAt: newAlias.createdAt,
+            alias: result.alias,
+            createdAt: result.createdAt,
         });
     } catch (error) {
         console.error('Error registering alias:', error);
