@@ -87,7 +87,7 @@ export async function getTokenBalance(
     tokenAddress: string = STRK_TOKEN
 ): Promise<string> {
     const provider = getProvider();
-    const contract = new Contract(ERC20_ABI, tokenAddress, provider);
+    const contract = new Contract({ abi: ERC20_ABI as any, address: tokenAddress, providerOrAccount: provider });
 
     try {
         const balance = await contract.balance_of(address);
@@ -110,11 +110,11 @@ export async function getStealthBalances(
 
     if (CONTRACTS.STEALTH_PAYMENT && CONTRACTS.STEALTH_PAYMENT !== '0x0') {
         try {
-            const contract = new Contract(
-                STEALTH_PAYMENT_ABI as readonly Record<string, unknown>[],
-                CONTRACTS.STEALTH_PAYMENT,
-                provider,
-            );
+            const contract = new Contract({
+                abi: [...STEALTH_PAYMENT_ABI] as any,
+                address: CONTRACTS.STEALTH_PAYMENT,
+                providerOrAccount: provider,
+            });
             const [stkBalance, ethBalance] = await Promise.all([
                 contract.get_token_balance(STRK_TOKEN, stealthAddress),
                 contract.get_eth_balance(stealthAddress),

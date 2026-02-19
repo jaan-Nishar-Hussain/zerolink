@@ -202,7 +202,7 @@ export function Pay() {
             // ─── Ask the relayer to withdraw to the stealth address ────────
             // Use the first note for the relay request (relayer handles one at a time)
             for (const note of allNotes) {
-                const relayReq = buildRelayRequest(note, stealthAddress);
+                const relayReq = buildRelayRequest(note, stealthAddress, coords.x, coords.y);
                 try {
                     const relayResult = await api.submitRelay(relayReq);
                     if (relayResult.transactionHash) {

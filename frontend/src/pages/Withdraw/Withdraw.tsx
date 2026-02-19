@@ -112,8 +112,22 @@ export function Withdraw() {
                         balanceStrk = balances.strk;
                         balanceEth = balances.eth;
                     } catch {
-                        // Balance fetch failed, show 0
+                        // Balance fetch failed — fall back to announced amount
                     }
+
+                    // If on-chain balance is 0 but we have an announced amount,
+                    // use that as the display balance so the user can attempt withdrawal
+                    if (balanceStrk === '0' && balanceEth === '0' && d.amount && d.amount !== '0') {
+                        const isEthToken = d.token === '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7'
+                            || d.token === '0x0'
+                            || d.token === '0x0000000000000000000000000000000000000000000000000000000000000000';
+                        if (isEthToken) {
+                            balanceEth = d.amount;
+                        } else {
+                            balanceStrk = d.amount;
+                        }
+                    }
+
                     return {
                         stealthAddress: d.stealthAddress,
                         ephemeralPubKey: d.ephemeralPubKey,
@@ -159,7 +173,7 @@ export function Withdraw() {
                 viewingPrivateKey: stealthKeys.viewingKeyPair.privateKey,
                 spendPrivateKey: stealthKeys.spendKeyPair.privateKey,
                 recipientAddress: walletAddress,
-                amount: payment.balanceStrk !== '0' ? payment.balanceStrk : payment.balanceEth,
+                amount: payment.balanceStrk !== '0' ? payment.balanceStrk : (payment.balanceEth !== '0' ? payment.balanceEth : payment.amount),
                 tokenAddress: payment.balanceStrk !== '0'
                     ? '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d'
                     : '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7',
