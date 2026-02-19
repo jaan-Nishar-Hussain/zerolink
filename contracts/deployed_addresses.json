@@ -3,13 +3,13 @@
   "deployedAt": "2026-02-16T00:00:00Z",
   "contracts": {
     "EventEmitter": "0x0427d6aa911c14ffe02cfad257eda04472b7624a833a0739ad4401490acb0bed",
-    "StealthPayment": "0x0588f6ddd9bd317973e36cd84994a1eddf896d6baa5e9f3bb1c06696df0ce738",
+    "StealthPayment": "0x053f0f09c68b4f898e7e6c13ca9b7b8684a47b32da8df49f1313270739a46cfe",
     "TokenAdapter": "0x054babcc7c53be48e3693d43d576368528ff9b4a70234caa711b6328b50cdc70",
     "DepositPool": "0x03806679bbabe38b9150d870de38e3ded23519db50582c91b135cdb84e65efdc"
   },
   "classHashes": {
     "EventEmitter": "0x21e0bde30543d232c6e56e3cad2d06fda060702f34ebcab267cef00bec2205f",
-    "StealthPayment": "0x0095a4da18853e751828badaced27209a31acc132eee385755dc9da56cd38378",
+    "StealthPayment": "0x680b3e963f9a247e0d86071a43d695961fb6b4ee957d7f72a2aa4a962b5f1f",
     "TokenAdapter": "0x035d1598348fc39d43f68c5687074f54d65f1dd9b77f0754ccf7ce93c0074baa",
     "DepositPool": "0x71cc7a3f9daba2e5c4726e4395fa8133766d588be04e78dc26f924f9d5a5316"
   },
