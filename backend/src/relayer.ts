@@ -5,6 +5,12 @@
  * never touches the withdrawal. This breaks the on-chain link between deposit
  * and stealth-address payment.
  *
+ * Flow:
+ *   1. Withdraw from DepositPool to the relayer's own address
+ *   2. Approve StealthPayment to spend the withdrawn tokens
+ *   3. Call StealthPayment.send_eth / send_token so the funds are recorded
+ *      in the contract's internal balance and the on-chain announcement is emitted
+ *
  * The relayer is a backend-only service with its own funded Starknet account.
  */
 
@@ -24,7 +30,10 @@ let _provider: RpcProvider | null = null;
 let _relayerKey = '';
 let _relayerAccount = '';
 let _depositPool = '';
+let _stealthPayment = '';
 let _initialised = false;
+
+const ETH_TOKEN = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7';
 
 function ensureInitialised(): void {
     if (_initialised) return;
@@ -39,31 +48,15 @@ function ensureInitialised(): void {
     _relayerKey = process.env.RELAYER_PRIVATE_KEY || '';
     _relayerAccount = process.env.RELAYER_ACCOUNT_ADDRESS || '';
     _depositPool = process.env.DEPOSIT_POOL_CONTRACT || '';
+    _stealthPayment = process.env.STEALTH_PAYMENT_CONTRACT || '';
     _initialised = true;
 
     console.log('[Relayer] Initialised');
-    console.log('[Relayer]   RPC URL :', rpcUrl.substring(0, 50) + '…');
-    console.log('[Relayer]   Account :', _relayerAccount ? _relayerAccount.substring(0, 16) + '…' : 'NOT SET');
-    console.log('[Relayer]   Pool    :', _depositPool ? _depositPool.substring(0, 16) + '…' : 'NOT SET');
+    console.log('[Relayer]   RPC URL  :', rpcUrl.substring(0, 50) + '…');
+    console.log('[Relayer]   Account  :', _relayerAccount ? _relayerAccount.substring(0, 16) + '…' : 'NOT SET');
+    console.log('[Relayer]   Pool     :', _depositPool ? _depositPool.substring(0, 16) + '…' : 'NOT SET');
+    console.log('[Relayer]   Stealth  :', _stealthPayment ? _stealthPayment.substring(0, 16) + '…' : 'NOT SET');
 }
-
-// Minimal ABI for DepositPool.withdraw
-const DEPOSIT_POOL_ABI = [
-    {
-        name: 'withdraw',
-        type: 'function',
-        inputs: [
-            { name: 'nullifier_hash', type: 'felt252' },
-            { name: 'commitment', type: 'felt252' },
-            { name: 'recipient', type: 'felt252' },
-            { name: 'amount', type: 'u256' },
-            { name: 'token', type: 'felt252' },
-            { name: 'secret', type: 'felt252' },
-        ],
-        outputs: [],
-        state_mutability: 'external',
-    },
-];
 
 export interface RelayRequest {
     nullifierHash: string;
@@ -72,6 +65,8 @@ export interface RelayRequest {
     amount: string;
     token: string;
     secret: string;
+    ephemeralPubKeyX: string;
+    ephemeralPubKeyY: string;
 }
 
 export interface RelayResult {
@@ -90,11 +85,16 @@ function validateRequest(req: RelayRequest): string | null {
     if (!req.amount || BigInt(req.amount) <= 0n) return 'Invalid amount';
     if (!req.token) return 'Missing token';
     if (!req.secret) return 'Missing secret';
+    if (!req.ephemeralPubKeyX) return 'Missing ephemeralPubKeyX';
+    if (!req.ephemeralPubKeyY) return 'Missing ephemeralPubKeyY';
     return null;
 }
 
 /**
- * Process a relay request: call DepositPool.withdraw on-chain
+ * Process a relay request:
+ *   1. DepositPool.withdraw → relayer receives tokens
+ *   2. Token.approve → StealthPayment can pull tokens
+ *   3. StealthPayment.send_eth / send_token → records balance + emits event
  */
 export async function processRelayRequest(request: RelayRequest): Promise<RelayResult> {
     ensureInitialised();
@@ -104,7 +104,7 @@ export async function processRelayRequest(request: RelayRequest): Promise<RelayR
         return { transactionHash: '', status: 'error', error: validationError };
     }
 
-    if (!_relayerKey || !_relayerAccount || !_depositPool) {
+    if (!_relayerKey || !_relayerAccount || !_depositPool || !_stealthPayment) {
         return {
             transactionHash: '',
             status: 'error',
@@ -122,21 +122,66 @@ export async function processRelayRequest(request: RelayRequest): Promise<RelayR
         const amountBig = BigInt(request.amount);
         const amountU256 = cairo.uint256(amountBig);
 
-        const tx = await account.execute([
+        const isEth =
+            request.token.toLowerCase() === ETH_TOKEN.toLowerCase() ||
+            request.token === '0x0';
+
+        const tokenForApproval = isEth ? ETH_TOKEN : request.token;
+
+        // Build a 3-step multicall executed atomically
+        const calls = [
+            // 1. Withdraw from DepositPool to relayer (self)
             {
                 contractAddress: _depositPool,
                 entrypoint: 'withdraw',
                 calldata: [
                     request.nullifierHash,
                     request.commitment,
-                    request.recipient,
+                    _relayerAccount,       // recipient = relayer, NOT stealth address
                     amountU256.low,
                     amountU256.high,
                     request.token,
                     request.secret,
                 ],
             },
-        ]);
+            // 2. Approve StealthPayment to pull the tokens from the relayer
+            {
+                contractAddress: tokenForApproval,
+                entrypoint: 'approve',
+                calldata: [
+                    _stealthPayment,
+                    amountU256.low,
+                    amountU256.high,
+                ],
+            },
+            // 3. Deposit into StealthPayment (records internal balance + emits event)
+            isEth
+                ? {
+                      contractAddress: _stealthPayment,
+                      entrypoint: 'send_eth',
+                      calldata: [
+                          request.recipient,
+                          amountU256.low,
+                          amountU256.high,
+                          request.ephemeralPubKeyX,
+                          request.ephemeralPubKeyY,
+                      ],
+                  }
+                : {
+                      contractAddress: _stealthPayment,
+                      entrypoint: 'send_token',
+                      calldata: [
+                          request.token,
+                          request.recipient,
+                          amountU256.low,
+                          amountU256.high,
+                          request.ephemeralPubKeyX,
+                          request.ephemeralPubKeyY,
+                      ],
+                  },
+        ];
+
+        const tx = await account.execute(calls);
 
         console.log(`[Relayer] tx submitted: ${tx.transaction_hash}`);
         return { transactionHash: tx.transaction_hash, status: 'submitted' };

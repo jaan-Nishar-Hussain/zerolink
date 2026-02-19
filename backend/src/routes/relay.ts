@@ -16,9 +16,9 @@ const router = Router();
  */
 router.post('/', async (req, res) => {
     try {
-        const { nullifierHash, commitment, recipient, amount, token, secret } = req.body;
+        const { nullifierHash, commitment, recipient, amount, token, secret, ephemeralPubKeyX, ephemeralPubKeyY } = req.body;
 
-        if (!nullifierHash || !commitment || !recipient || !amount || !token || !secret) {
+        if (!nullifierHash || !commitment || !recipient || !amount || !token || !secret || !ephemeralPubKeyX || !ephemeralPubKeyY) {
             res.status(400).json({ error: 'Missing required fields' });
             return;
         }
@@ -30,6 +30,8 @@ router.post('/', async (req, res) => {
             amount,
             token,
             secret,
+            ephemeralPubKeyX,
+            ephemeralPubKeyY,
         });
 
         if (result.status === 'error') {

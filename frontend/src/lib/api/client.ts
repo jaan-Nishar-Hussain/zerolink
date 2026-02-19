@@ -158,6 +158,8 @@ class ApiClient {
         amount: string;
         token: string;
         secret: string;
+        ephemeralPubKeyX: string;
+        ephemeralPubKeyY: string;
     }): Promise<{ transactionHash: string; status: string }> {
         return this.request('/relay', {
             method: 'POST',

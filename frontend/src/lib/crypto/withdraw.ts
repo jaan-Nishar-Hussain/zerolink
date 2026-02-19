@@ -7,6 +7,7 @@
  */
 
 import { Account, AccountInterface, Contract, RpcProvider, cairo } from 'starknet';
+import { pedersen } from '@scure/starknet';
 import { bytesToHex, deriveStealthPrivateKey, publicKeyToStarknetAddress, derivePublicKey, parsePublicKeyToCoordinates } from './stealth';
 import { CONTRACTS, STEALTH_PAYMENT_ABI } from '../contracts';
 
@@ -98,11 +99,35 @@ export async function getTokenBalance(
 }
 
 /**
- * Get balances for multiple tokens
+ * Get balances for a stealth address from the StealthPayment contract's
+ * internal ledger.  Falls back to raw ERC-20 balance_of if the contract
+ * is not configured.
  */
 export async function getStealthBalances(
     stealthAddress: string
 ): Promise<{ strk: string; eth: string }> {
+    const provider = getProvider();
+
+    if (CONTRACTS.STEALTH_PAYMENT && CONTRACTS.STEALTH_PAYMENT !== '0x0') {
+        try {
+            const contract = new Contract(
+                STEALTH_PAYMENT_ABI as readonly Record<string, unknown>[],
+                CONTRACTS.STEALTH_PAYMENT,
+                provider,
+            );
+            const [stkBalance, ethBalance] = await Promise.all([
+                contract.get_token_balance(STRK_TOKEN, stealthAddress),
+                contract.get_eth_balance(stealthAddress),
+            ]);
+            return {
+                strk: stkBalance.toString(),
+                eth: ethBalance.toString(),
+            };
+        } catch (error) {
+            console.error('Failed to get stealth balances from StealthPayment contract:', error);
+        }
+    }
+
     const [strk, eth] = await Promise.all([
         getTokenBalance(stealthAddress, STRK_TOKEN),
         getTokenBalance(stealthAddress, ETH_TOKEN),
@@ -155,9 +180,11 @@ export async function withdrawFromStealth(
         );
     }
 
-    // 3. Get the stealth public key X coordinate for proof
-    const stealthPubKeyHex = bytesToHex(derivedPubKey);
-    const { x: pubKeyX } = parsePublicKeyToCoordinates(stealthPubKeyHex);
+    // 3. Compute the withdrawal proof: Pedersen(eph_x, eph_y)
+    //    The contract stores Pedersen(ephemeral_pub_key_x, ephemeral_pub_key_y)
+    //    at deposit time and verifies this hash at withdrawal.
+    const { x: ephKeyX, y: ephKeyY } = getEphemeralKeyCoordinates(ephemeralPubKey);
+    const proofHash = '0x' + pedersen(BigInt(ephKeyX), BigInt(ephKeyY)).toString(16);
 
     // 4. Build the contract call via the user's connected wallet
     const provider = getProvider();
@@ -178,7 +205,7 @@ export async function withdrawFromStealth(
                     recipientAddress,
                     amountU256.low,
                     amountU256.high,
-                    pubKeyX,
+                    proofHash,
                 ],
             }];
         } else {
@@ -191,7 +218,7 @@ export async function withdrawFromStealth(
                     recipientAddress,
                     amountU256.low,
                     amountU256.high,
-                    pubKeyX,
+                    proofHash,
                 ],
             }];
         }
@@ -306,4 +333,17 @@ function hexToBytes(hex: string): Uint8Array {
         bytes[i / 2] = parseInt(cleanHex.slice(i, i + 2), 16);
     }
     return bytes;
+}
+
+/**
+ * Extract ephemeral key x,y coordinates from either:
+ *  - Compressed secp256k1 hex (from frontend announcements)
+ *  - "x:y" format (from on-chain indexed events)
+ */
+function getEphemeralKeyCoordinates(ephemeralPubKey: string): { x: string; y: string } {
+    if (ephemeralPubKey.includes(':')) {
+        const [x, y] = ephemeralPubKey.split(':');
+        return { x, y };
+    }
+    return parsePublicKeyToCoordinates(ephemeralPubKey);
 }

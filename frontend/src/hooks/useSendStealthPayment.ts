@@ -11,7 +11,7 @@
 import { useCallback, useState } from 'react';
 import { useAccount, useSendTransaction } from '@starknet-react/core';
 import { CONTRACTS } from '../lib/contracts';
-import { deriveStealthAddress, type MetaAddress } from '../lib/crypto';
+import { deriveStealthAddress, parsePublicKeyToCoordinates, type MetaAddress } from '../lib/crypto';
 import { api } from '../lib/api';
 import {
     createDepositNote,
@@ -71,8 +71,9 @@ export function useSendStealthPayment() {
             note.depositTxHash = depositResult.transaction_hash;
             saveNote(note);
 
-            // ─── Step 3: Ask relayer to withdraw to stealth address ────
-            const relayReq = buildRelayRequest(note, stealth.address);
+            // ─── Step 3: Ask relayer to withdraw via StealthPayment ────
+            const { x: ephKeyX, y: ephKeyY } = parsePublicKeyToCoordinates(stealth.ephemeralPubKey);
+            const relayReq = buildRelayRequest(note, stealth.address, ephKeyX, ephKeyY);
             const relayResult = await api.submitRelay(relayReq);
             const finalTxHash = relayResult.transactionHash || depositResult.transaction_hash;
 

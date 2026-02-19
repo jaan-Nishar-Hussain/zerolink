@@ -167,11 +167,13 @@ export function buildDepositCalldata(note: DepositNote, depositPoolAddress: stri
 
 /**
  * Build the relay request body that the relayer needs to call
- * DepositPool.withdraw on-chain.
+ * DepositPool.withdraw → StealthPayment.send_eth/send_token on-chain.
  */
 export function buildRelayRequest(
     note: DepositNote,
     recipientStealthAddress: string,
+    ephemeralPubKeyX: string,
+    ephemeralPubKeyY: string,
 ) {
     const nHash = nullifierHash(note.nullifier);
     return {
@@ -181,6 +183,8 @@ export function buildRelayRequest(
         amount: note.amount,
         token: note.token,
         secret: note.secret,
+        ephemeralPubKeyX,
+        ephemeralPubKeyY,
     };
 }
 
