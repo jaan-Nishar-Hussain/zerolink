@@ -10,7 +10,7 @@ import {
     Copy,
     ExternalLink
 } from 'lucide-react';
-import { useAccount, useConnect, useSendTransaction } from '@starknet-react/core';
+import { useAccount, useConnect } from '@starknet-react/core';
 import { deriveStealthAddress, parsePublicKeyToCoordinates, type MetaAddress } from '../../lib/crypto';
 import { api } from '../../lib/api';
 import { useAppStore } from '../../store';
@@ -61,9 +61,6 @@ export function Pay() {
 
     const { address: userAddress, account } = useAccount();
     const { connect, connectors } = useConnect();
-    const { sendAsync } = useSendTransaction({
-        calls: []
-    });
 
     const ETH_ADDRESS = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7';
     const STRK_ADDRESS = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
@@ -223,8 +220,18 @@ export function Pay() {
                     },
             ];
 
-            const txResult = await sendAsync(calls);
+            console.log('[Pay] Sending payment via StealthPayment contract');
+            console.log('[Pay]   Contract:', stealthPaymentAddress);
+            console.log('[Pay]   Token:', tokenAddress);
+            console.log('[Pay]   Stealth Address:', stealthAddress);
+            console.log('[Pay]   Amount (wei):', totalWei.toString());
+            console.log('[Pay]   Eph Key X:', coords.x);
+            console.log('[Pay]   Eph Key Y:', coords.y);
+            console.log('[Pay]   Calls:', JSON.stringify(calls, null, 2));
+
+            const txResult = await account.execute(calls);
             const finalTxHash = txResult.transaction_hash;
+            console.log('[Pay] ✅ Transaction submitted:', finalTxHash);
 
             setTxHash(finalTxHash);
             setStep('success');

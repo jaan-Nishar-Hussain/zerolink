@@ -186,6 +186,15 @@ export async function withdrawFromStealth(
     const { x: ephKeyX, y: ephKeyY } = getEphemeralKeyCoordinates(ephemeralPubKey);
     const proofHash = pedersen(BigInt(ephKeyX), BigInt(ephKeyY));
 
+    console.log('[Withdraw] Proof computation:');
+    console.log('[Withdraw]   Eph Key X:', ephKeyX);
+    console.log('[Withdraw]   Eph Key Y:', ephKeyY);
+    console.log('[Withdraw]   Proof Hash:', proofHash);
+    console.log('[Withdraw]   Stealth Address:', stealthAddress);
+    console.log('[Withdraw]   Recipient:', recipientAddress);
+    console.log('[Withdraw]   Amount:', amount);
+    console.log('[Withdraw]   Token:', tokenAddress);
+
     // 4. Build the contract call via the user's connected wallet
     const provider = getProvider();
     const amountU256 = cairo.uint256(amount);
