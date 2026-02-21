@@ -184,7 +184,7 @@ export async function withdrawFromStealth(
     //    The contract stores Pedersen(ephemeral_pub_key_x, ephemeral_pub_key_y)
     //    at deposit time and verifies this hash at withdrawal.
     const { x: ephKeyX, y: ephKeyY } = getEphemeralKeyCoordinates(ephemeralPubKey);
-    const proofHash = '0x' + pedersen(BigInt(ephKeyX), BigInt(ephKeyY)).toString(16);
+    const proofHash = pedersen(BigInt(ephKeyX), BigInt(ephKeyY));
 
     // 4. Build the contract call via the user's connected wallet
     const provider = getProvider();
