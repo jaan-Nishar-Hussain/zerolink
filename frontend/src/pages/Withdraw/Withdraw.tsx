@@ -33,6 +33,7 @@ interface WithdrawablePayment {
     stealthPrivateKey: Uint8Array;
     balanceStrk: string;
     balanceEth: string;
+    relayPending: boolean;
     withdrawStatus: 'idle' | 'withdrawing' | 'success' | 'failed';
     withdrawTxHash?: string;
     withdrawError?: string;
@@ -112,12 +113,16 @@ export function Withdraw() {
                         balanceStrk = balances.strk;
                         balanceEth = balances.eth;
                     } catch {
-                        // Balance fetch failed — fall back to announced amount
+                        // Balance fetch failed
                     }
 
-                    // If on-chain balance is 0 but we have an announced amount,
-                    // use that as the display balance so the user can attempt withdrawal
-                    if (balanceStrk === '0' && balanceEth === '0' && d.amount && d.amount !== '0') {
+                    // Check if the relay has deposited on-chain
+                    const onChainBalanceIsZero = balanceStrk === '0' && balanceEth === '0';
+                    const relayPending = onChainBalanceIsZero && d.amount && d.amount !== '0';
+
+                    // If relay completed, use on-chain balances;
+                    // if relay is still pending, show announced amount for reference only
+                    if (relayPending) {
                         const isEthToken = d.token === '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7'
                             || d.token === '0x0'
                             || d.token === '0x0000000000000000000000000000000000000000000000000000000000000000';
@@ -137,6 +142,7 @@ export function Withdraw() {
                         stealthPrivateKey: d.stealthPrivateKey,
                         balanceStrk,
                         balanceEth,
+                        relayPending: !!relayPending,
                         withdrawStatus: 'idle' as const,
                     };
                 })
@@ -236,7 +242,7 @@ export function Withdraw() {
 
     const totalStrk = payments.reduce((sum, p) => sum + parseFloat(p.balanceStrk || '0'), 0);
     const totalEth = payments.reduce((sum, p) => sum + parseFloat(p.balanceEth || '0'), 0);
-    const withdrawableCount = payments.filter(p => p.withdrawStatus === 'idle' &&
+    const withdrawableCount = payments.filter(p => p.withdrawStatus === 'idle' && !p.relayPending &&
         (parseFloat(p.balanceStrk) > 0 || parseFloat(p.balanceEth) > 0)).length;
 
     // Loading keys
@@ -465,11 +471,13 @@ export function Withdraw() {
                                             {hasStrk && (
                                                 <span className="balance-tag strk">
                                                     {formatAmount(payment.balanceStrk)} STRK
+                                                    {payment.relayPending && <span className="pending-label"> (pending relay)</span>}
                                                 </span>
                                             )}
                                             {hasEth && (
                                                 <span className="balance-tag eth">
                                                     {formatAmount(payment.balanceEth)} ETH
+                                                    {payment.relayPending && <span className="pending-label"> (pending relay)</span>}
                                                 </span>
                                             )}
                                             {!hasBalance && payment.withdrawStatus !== 'success' && (
@@ -497,7 +505,7 @@ export function Withdraw() {
 
                                     {/* Actions */}
                                     <div className="withdraw-actions">
-                                        {payment.withdrawStatus === 'idle' && hasBalance && (
+                                        {payment.withdrawStatus === 'idle' && hasBalance && !payment.relayPending && (
                                             <button
                                                 className="btn btn-primary btn-sm"
                                                 onClick={() => handleWithdraw(index)}
@@ -505,6 +513,12 @@ export function Withdraw() {
                                                 <Download size={14} />
                                                 Withdraw
                                             </button>
+                                        )}
+                                        {payment.withdrawStatus === 'idle' && payment.relayPending && (
+                                            <span className="withdraw-badge relay-pending" title="The on-chain deposit was not completed. These funds are not in the stealth contract and cannot be withdrawn. Please re-send the payment.">
+                                                <AlertCircle size={12} />
+                                                Not Funded
+                                            </span>
                                         )}
                                         {payment.withdrawStatus === 'success' && (
                                             <span className="withdraw-badge success">Withdrawn</span>

@@ -16,12 +16,7 @@ import { api } from '../../lib/api';
 import { useAppStore } from '../../store';
 import { CONTRACTS } from '../../lib/contracts/config';
 import {
-    createDepositNote,
-    buildDepositCalldata,
-    buildRelayRequest,
-    saveNote,
     DENOMINATIONS,
-    splitAmountIntoDenominations,
 } from '../../lib/crypto/private-send';
 import './Pay.css';
 
@@ -175,50 +170,66 @@ export function Pay() {
 
             const coords = parsePublicKeyToCoordinates(ephemeralPubKey);
             const tokenAddress = token === 'ETH' ? ETH_ADDRESS : STRK_ADDRESS;
-            const depositPoolAddress = CONTRACTS.DEPOSIT_POOL;
+            const stealthPaymentAddress = CONTRACTS.STEALTH_PAYMENT;
 
-            if (!depositPoolAddress || depositPoolAddress === '0x0') {
-                throw new Error('Deposit pool contract not configured. Set VITE_DEPOSIT_POOL_CONTRACT.');
+            if (!stealthPaymentAddress || stealthPaymentAddress === '0x0') {
+                throw new Error('StealthPayment contract not configured. Set VITE_STEALTH_PAYMENT_CONTRACT.');
             }
 
-            // ─── Fixed-denomination deposits ────────────────────────────────
-            // Each deposit uses a valid denomination. For amounts > 1 tier,
-            // we split into multiple deposits.
-            let finalTxHash = '';
-            const allNotes: any[] = [];
+            // ─── Direct StealthPayment deposit ──────────────────────────────
+            // Send funds directly via the StealthPayment contract so they are
+            // recorded in the contract's internal ledger and immediately
+            // withdrawable by the recipient.
+            const denomLabel = DENOMINATIONS.find(d => d.wei === selectedDenom)?.label || '1';
+            const totalAmount = (parseFloat(denomLabel) * depositCount).toString();
+            const totalWei = BigInt(selectedDenom) * BigInt(depositCount);
+            const amountLow = (totalWei & ((1n << 128n) - 1n)).toString();
+            const amountHigh = (totalWei >> 128n).toString();
 
-            for (let i = 0; i < depositCount; i++) {
-                const note = createDepositNote(selectedDenom, tokenAddress);
-                const { approve, deposit } = buildDepositCalldata(note, depositPoolAddress);
+            const isEth = token === 'ETH';
 
-                const depositResult = await sendAsync([approve, deposit]);
-                note.depositTxHash = depositResult.transaction_hash;
-                finalTxHash = depositResult.transaction_hash;
-
-                saveNote(note);
-                allNotes.push(note);
-            }
-
-            // ─── Ask the relayer to withdraw to the stealth address ────────
-            // Use the first note for the relay request (relayer handles one at a time)
-            for (const note of allNotes) {
-                const relayReq = buildRelayRequest(note, stealthAddress, coords.x, coords.y);
-                try {
-                    const relayResult = await api.submitRelay(relayReq);
-                    if (relayResult.transactionHash) {
-                        finalTxHash = relayResult.transactionHash;
+            // Build multicall: approve token + send via StealthPayment
+            const calls = [
+                // 1. Approve StealthPayment contract to pull tokens
+                {
+                    contractAddress: tokenAddress,
+                    entrypoint: 'approve',
+                    calldata: [stealthPaymentAddress, amountLow, amountHigh],
+                },
+                // 2. Call send_token or send_eth to record in contract's ledger
+                isEth
+                    ? {
+                        contractAddress: stealthPaymentAddress,
+                        entrypoint: 'send_eth',
+                        calldata: [
+                            stealthAddress,
+                            amountLow,
+                            amountHigh,
+                            coords.x,
+                            coords.y,
+                        ],
                     }
-                } catch (relayErr: any) {
-                    console.warn('Relay request failed (deposit is safe, can retry):', relayErr.message || relayErr);
-                }
-            }
+                    : {
+                        contractAddress: stealthPaymentAddress,
+                        entrypoint: 'send_token',
+                        calldata: [
+                            tokenAddress,
+                            stealthAddress,
+                            amountLow,
+                            amountHigh,
+                            coords.x,
+                            coords.y,
+                        ],
+                    },
+            ];
+
+            const txResult = await sendAsync(calls);
+            const finalTxHash = txResult.transaction_hash;
 
             setTxHash(finalTxHash);
             setStep('success');
 
             // Save sent transaction to the store
-            const denomLabel = DENOMINATIONS.find(d => d.wei === selectedDenom)?.label || '1';
-            const totalAmount = (parseFloat(denomLabel) * depositCount).toString();
             useAppStore.getState().addPayment({
                 id: finalTxHash,
                 type: 'sent',
@@ -234,7 +245,6 @@ export function Pay() {
             });
 
             // ─── Announce the payment so the recipient can detect it ───────
-            const totalWei = BigInt(selectedDenom) * BigInt(depositCount);
             try {
                 await api.announcePayment({
                     txHash: finalTxHash,

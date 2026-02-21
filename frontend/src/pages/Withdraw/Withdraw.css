@@ -307,6 +307,20 @@
     color: #f59e0b;
 }
 
+.withdraw-badge.relay-pending {
+    background: rgba(239, 68, 68, 0.10);
+    color: #ef4444;
+    gap: 0.35rem;
+    cursor: help;
+}
+
+.pending-label {
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: #f59e0b;
+    opacity: 0.8;
+}
+
 /* Empty State */
 .withdraw-empty {
     padding: 4rem 2rem;
