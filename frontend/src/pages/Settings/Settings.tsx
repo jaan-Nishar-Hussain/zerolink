@@ -95,7 +95,12 @@ export function Settings() {
             // Private keys are needed — the real app should load them from IndexedDB.
             // For now we import the helper that loads from secure storage.
             const { loadKeys } = await import('../../lib/crypto/storage');
-            const keys = await loadKeys();
+            const pwd = window.prompt('Enter your password to decrypt keys for rescan:');
+            if (!pwd) {
+                setRescanStatus('idle');
+                return;
+            }
+            const keys = await loadKeys(pwd);
             if (!keys) {
                 setRescanStatus('error');
                 return;

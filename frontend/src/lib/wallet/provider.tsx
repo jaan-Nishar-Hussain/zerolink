@@ -20,7 +20,7 @@ const connectors = [
 
 // Use Alchemy or Infura for more reliable RPC
 // Fall back to public endpoints with correct spec version handling
-function rpc(chain: typeof sepolia | typeof mainnet) {
+function rpc(chain: { id: bigint;[key: string]: any }) {
     const rpcUrl = chain.id === sepolia.id
         ? import.meta.env.VITE_STARKNET_RPC_URL || 'https://free-rpc.nethermind.io/sepolia-juno'
         : 'https://starknet-mainnet.public.blastapi.io/rpc/v0_7';
