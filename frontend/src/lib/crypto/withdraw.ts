@@ -119,21 +119,63 @@ export async function getStealthBalances(
                 contract.get_token_balance(STRK_TOKEN, stealthAddress),
                 contract.get_eth_balance(stealthAddress),
             ]);
+
+            // Handle cases where the return value is a struct (u256 {low, high})
+            const formatBalance = (val: any): string => {
+                if (val === undefined || val === null) return '0';
+                if (typeof val === 'bigint') return val.toString();
+                if (typeof val === 'number') return val.toString();
+                if (typeof val === 'string') return val;
+                // u256 struct with low/high
+                if (typeof val === 'object' && ('low' in val || 'high' in val)) {
+                    const low = BigInt(val.low ?? 0);
+                    const high = BigInt(val.high ?? 0);
+                    return ((high << 128n) + low).toString();
+                }
+                return val.toString();
+            };
+
             return {
-                strk: stkBalance.toString(),
-                eth: ethBalance.toString(),
+                strk: formatBalance(stkBalance),
+                eth: formatBalance(ethBalance),
             };
         } catch (error) {
-            console.error('Failed to get stealth balances from StealthPayment contract:', error);
+            console.error('[getStealthBalances] Contract query failed:', error);
+            // Do NOT fall through to ERC-20 balance_of — tokens are held
+            // by the StealthPayment contract, not at the stealth address.
+            // Returning 0 here is correct; the Withdraw page will check
+            // the deposit tx status to determine if it's truly unfunded
+            // or just a contract query issue.
+            return { strk: '0', eth: '0' };
         }
     }
 
+    // Only use raw ERC-20 balance when StealthPayment contract is NOT configured
     const [strk, eth] = await Promise.all([
         getTokenBalance(stealthAddress, STRK_TOKEN),
         getTokenBalance(stealthAddress, ETH_TOKEN),
     ]);
 
     return { strk, eth };
+}
+
+/**
+ * Verify whether a deposit transaction actually succeeded on-chain.
+ * Returns 'confirmed' if the tx was successful, 'reverted' if it failed,
+ * or 'pending' if the tx receipt is not yet available.
+ */
+export async function verifyDepositTransaction(
+    txHash: string
+): Promise<'confirmed' | 'reverted' | 'pending'> {
+    const provider = getProvider();
+    try {
+        const receipt = await provider.getTransactionReceipt(txHash);
+        if (receipt.isSuccess()) return 'confirmed';
+        if (receipt.isReverted()) return 'reverted';
+        return 'pending';
+    } catch {
+        return 'pending';
+    }
 }
 
 // =============================================================================

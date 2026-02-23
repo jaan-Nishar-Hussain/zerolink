@@ -21,6 +21,7 @@ import {
     getStealthBalances,
     type StealthKeys,
 } from '../../lib/crypto';
+import { verifyDepositTransaction } from '../../lib/crypto/withdraw';
 import { loadKeys } from '../../lib/crypto/storage';
 import './Withdraw.css';
 
@@ -34,6 +35,8 @@ interface WithdrawablePayment {
     balanceStrk: string;
     balanceEth: string;
     relayPending: boolean;
+    /** Status of the original deposit tx on-chain */
+    txStatus: 'confirmed' | 'reverted' | 'pending';
     withdrawStatus: 'idle' | 'withdrawing' | 'success' | 'failed';
     withdrawTxHash?: string;
     withdrawError?: string;
@@ -116,21 +119,44 @@ export function Withdraw() {
                         // Balance fetch failed
                     }
 
-                    // Check if the relay has deposited on-chain
                     const onChainBalanceIsZero = balanceStrk === '0' && balanceEth === '0';
-                    const relayPending = onChainBalanceIsZero && d.amount && d.amount !== '0';
 
-                    // If relay completed, use on-chain balances;
-                    // if relay is still pending, show announced amount for reference only
-                    if (relayPending) {
-                        const isEthToken = d.token === '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7'
-                            || d.token === '0x0'
-                            || d.token === '0x0000000000000000000000000000000000000000000000000000000000000000';
-                        if (isEthToken) {
-                            balanceEth = d.amount;
-                        } else {
-                            balanceStrk = d.amount;
+                    // When balance is zero but we have an announced amount,
+                    // verify whether the original deposit tx actually succeeded.
+                    let txStatus: 'confirmed' | 'reverted' | 'pending' = 'confirmed';
+                    let relayPending = false;
+
+                    if (onChainBalanceIsZero && d.amount && d.amount !== '0') {
+                        txStatus = await verifyDepositTransaction(d.txHash);
+
+                        if (txStatus === 'confirmed') {
+                            // Tx confirmed but balance is 0 — funds may have
+                            // already been withdrawn, or the balance query has
+                            // a format issue. Show the announced amount so the
+                            // user can still attempt a withdrawal.
+                            const isEthToken = d.token === '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7'
+                                || d.token === '0x0'
+                                || d.token === '0x0000000000000000000000000000000000000000000000000000000000000000';
+                            if (isEthToken) {
+                                balanceEth = d.amount;
+                            } else {
+                                balanceStrk = d.amount;
+                            }
+                        } else if (txStatus === 'pending') {
+                            // Tx not yet confirmed, show announced amount as
+                            // pending
+                            relayPending = true;
+                            const isEthToken = d.token === '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7'
+                                || d.token === '0x0'
+                                || d.token === '0x0000000000000000000000000000000000000000000000000000000000000000';
+                            if (isEthToken) {
+                                balanceEth = d.amount;
+                            } else {
+                                balanceStrk = d.amount;
+                            }
                         }
+                        // If txStatus === 'reverted', leave balances as 0
+                        // The tx failed on-chain — the payment is truly not funded.
                     }
 
                     return {
@@ -142,7 +168,8 @@ export function Withdraw() {
                         stealthPrivateKey: d.stealthPrivateKey,
                         balanceStrk,
                         balanceEth,
-                        relayPending: !!relayPending,
+                        relayPending,
+                        txStatus,
                         withdrawStatus: 'idle' as const,
                     };
                 })
@@ -471,16 +498,19 @@ export function Withdraw() {
                                             {hasStrk && (
                                                 <span className="balance-tag strk">
                                                     {formatAmount(payment.balanceStrk)} STRK
-                                                    {payment.relayPending && <span className="pending-label"> (pending relay)</span>}
+                                                    {payment.relayPending && <span className="pending-label"> (pending confirmation)</span>}
                                                 </span>
                                             )}
                                             {hasEth && (
                                                 <span className="balance-tag eth">
                                                     {formatAmount(payment.balanceEth)} ETH
-                                                    {payment.relayPending && <span className="pending-label"> (pending relay)</span>}
+                                                    {payment.relayPending && <span className="pending-label"> (pending confirmation)</span>}
                                                 </span>
                                             )}
-                                            {!hasBalance && payment.withdrawStatus !== 'success' && (
+                                            {!hasBalance && payment.txStatus === 'reverted' && payment.withdrawStatus !== 'success' && (
+                                                <span className="balance-tag empty">Tx Reverted — {formatAmount(payment.amount)} {getTokenSymbol(payment.token)} lost</span>
+                                            )}
+                                            {!hasBalance && payment.txStatus !== 'reverted' && payment.withdrawStatus !== 'success' && (
                                                 <span className="balance-tag empty">No balance</span>
                                             )}
                                         </div>
@@ -515,9 +545,15 @@ export function Withdraw() {
                                             </button>
                                         )}
                                         {payment.withdrawStatus === 'idle' && payment.relayPending && (
-                                            <span className="withdraw-badge relay-pending" title="The on-chain deposit was not completed. These funds are not in the stealth contract and cannot be withdrawn. Please re-send the payment.">
-                                                <AlertCircle size={12} />
-                                                Not Funded
+                                            <span className="withdraw-badge relay-pending" title="The transaction is still being confirmed on-chain. Please wait a moment and rescan.">
+                                                <Loader2 size={12} className="icon-spin" />
+                                                Pending
+                                            </span>
+                                        )}
+                                        {payment.withdrawStatus === 'idle' && !hasBalance && payment.txStatus === 'reverted' && (
+                                            <span className="withdraw-badge relay-pending" title="The deposit transaction was reverted on-chain. The funds were never received by the stealth contract.">
+                                                <XCircle size={12} />
+                                                Tx Failed
                                             </span>
                                         )}
                                         {payment.withdrawStatus === 'success' && (
